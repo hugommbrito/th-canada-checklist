@@ -177,6 +177,8 @@
     margin-left:0;
   }
   .add-btn.ghost:hover{border-color:var(--amber);color:var(--amber);}
+  .add-btn.ghost:disabled{opacity:.4;cursor:default;}
+  .add-btn.ghost:disabled:hover{border-color:var(--navy-700);color:var(--paper);}
 
   .board{
     display:grid;
@@ -761,6 +763,7 @@
     </select>
     <button class="add-btn ghost" id="openAddCategory">+ Categoria</button>
     <button class="add-btn ghost" id="openManageCategories">⚙ Gerenciar categorias</button>
+    <button class="add-btn ghost" id="toggleAllChecklists">⌄ Expandir checklists</button>
     <button class="add-btn" id="openAdd">+ Nova demanda</button>
   </div>
 
@@ -1184,10 +1187,16 @@ function fillColumn(container, countEl, list){
   list.forEach(t=> container.appendChild(buildCard(t)));
 }
 
-function render(){
-  const catFilter = activeCatFilter;
+// Tarefas que passam pelos filtros ativos — ou seja, as que estão na tela.
+function visibleTasks(){
   const ownerFilter = document.getElementById('filterOwner').value;
+  return tasks.filter(t =>
+    (!activeCatFilter || t.category === activeCatFilter) &&
+    (!ownerFilter || t.owner === ownerFilter)
+  );
+}
 
+function render(){
   // category summary chips
   const summaryEl = document.getElementById('catSummary');
   summaryEl.innerHTML = '';
@@ -1201,11 +1210,7 @@ function render(){
     summaryEl.appendChild(chip);
   });
 
-  const filtered = tasks.filter(t =>
-    (!catFilter || t.category === catFilter) &&
-    (!ownerFilter || t.owner === ownerFilter)
-  );
-
+  const filtered = visibleTasks();
   const onBoard = filtered.filter(t => !t.queue);
 
   ['A fazer','Em andamento','Concluído'].forEach(status=>{
@@ -1231,7 +1236,38 @@ function render(){
 
   document.getElementById('statusNote').textContent =
     total === 0 ? 'Nenhuma demanda cadastrada ainda — adicione a primeira acima.' : '';
+
+  updateChecklistToggle();
 }
+
+// ---- Expandir / recolher todos os checklists ----
+// Age sobre as tarefas visíveis: com um filtro ativo, o botão fala sobre o
+// que está na tela, não sobre o painel inteiro.
+function checklistTasks(){
+  return visibleTasks().filter(t => (t.checklist || []).length > 0);
+}
+
+function updateChecklistToggle(){
+  const btn = document.getElementById('toggleAllChecklists');
+  const list = checklistTasks();
+  const allOpen = list.length > 0 && list.every(t => openPanels.has('cl-' + t.id));
+  btn.disabled = list.length === 0;
+  btn.textContent = allOpen ? '⌃ Recolher checklists' : '⌄ Expandir checklists';
+  btn.title = list.length === 0
+    ? 'Nenhuma demanda visível tem checklist'
+    : `${allOpen ? 'Recolher' : 'Expandir'} os checklists de ${list.length} demanda(s)`;
+}
+
+document.getElementById('toggleAllChecklists').addEventListener('click', ()=>{
+  const list = checklistTasks();
+  if(!list.length) return;
+  const expand = !list.every(t => openPanels.has('cl-' + t.id));
+  list.forEach(t=>{
+    if(expand) openPanels.add('cl-' + t.id);
+    else openPanels.delete('cl-' + t.id);
+  });
+  render();
+});
 
 const STATUS_ORDER = ['A fazer','Em andamento','Concluído'];
 

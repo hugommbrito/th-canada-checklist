@@ -90,6 +90,13 @@ Como uma coluna virou grade, o hit-test do drag deixou de ser só por Y: quando
 detecta mais de uma sub-coluna, passa a decidir a posição por ordem de leitura
 (linha, depois metade esquerda/direita do card).
 
+Na toolbar há um botão que expande ou recolhe todos os checklists de uma vez. Ele
+age sobre as **tarefas visíveis**: com um filtro de categoria ou de responsável
+ativo, fala só sobre o que está na tela, e desabilita quando nenhuma demanda
+visível tem checklist. O rótulo alterna conforme o estado atual. Esse estado é de
+visualização, mora só em memória — não vai para o banco e volta recolhido a cada
+recarga.
+
 ## Rodando localmente
 
 ```bash
