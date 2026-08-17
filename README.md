@@ -63,6 +63,33 @@ ordem manual e ordenação automática não convivem. Na primeira carga o `order
 semeado a partir da ordenação por prazo anterior, então nada muda de lugar
 sozinho. O aviso de atraso (⚠) continua igual.
 
+## Densidade do board
+
+O board ocupa a largura inteira da janela (não há mais o limite de 1100px) e os
+cards dentro de cada coluna fluem em **sub-colunas**, em ordem de leitura, via
+`grid-template-columns: repeat(auto-fill, minmax(265px, 1fr))`. Numa tela larga
+uma coluna de 800px mostrava 1 card por linha e desperdiçava o resto; agora
+empacota quantos couberem. `auto-fill` e não `auto-fit` de propósito: com
+`auto-fit`, um card sozinho esticaria até os 800px.
+
+Medido com 18 demandas, contando cards inteiros visíveis sem rolar:
+
+| Tela | Antes | Depois |
+|---|---|---|
+| MacBook 1512×945 | 6 | 12 |
+| Full HD 1920×1080 | 9 | 18 |
+| Ultrawide 2560×1440 | 13 | 18 |
+
+Abaixo de ~1700px a coluna ainda é estreita demais para duas sub-colunas, então
+o ganho ali vem só da densidade (cabeçalho em uma linha, paddings e fontes
+menores no card). O piso de 265px é o ponto em que a linha de ações do card
+("← Voltar / Avançar → / Editar / Excluir" mais os ícones de fila) ainda cabe em
+uma linha — abaixo disso ela quebra em duas e o card volta a crescer.
+
+Como uma coluna virou grade, o hit-test do drag deixou de ser só por Y: quando
+detecta mais de uma sub-coluna, passa a decidir a posição por ordem de leitura
+(linha, depois metade esquerda/direita do card).
+
 ## Rodando localmente
 
 ```bash
