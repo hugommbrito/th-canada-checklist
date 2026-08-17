@@ -291,6 +291,9 @@
   .badge.overdue{background:rgba(217,99,90,0.25);color:#a83a30;font-weight:600;}
   .badge.checklist-badge{cursor:pointer;}
   .badge.checklist-badge:hover{background:rgba(0,0,0,0.1);}
+  .badge.comment-badge{cursor:pointer;}
+  .badge.comment-badge:hover{background:rgba(0,0,0,0.1);}
+  .badge.comment-badge.has{background:rgba(62,142,126,0.16);color:#276a5a;}
 
   .checklist{
     margin:0 0 10px;
@@ -309,6 +312,89 @@
   .checklist-item input[type=checkbox]{accent-color:var(--teal);}
   .checklist-item.done label{text-decoration:line-through;color:var(--ink-soft);}
   .checklist-item label{flex:1;cursor:pointer;}
+
+  /* Comentários */
+  .comments{
+    margin:0 0 10px;
+    padding:8px 0 0;
+    border-top:1px dashed rgba(0,0,0,0.12);
+    display:none;
+  }
+  .comments.open{display:block;}
+  .comment{
+    background:rgba(0,0,0,0.045);
+    border-radius:7px;
+    padding:6px 8px;
+    margin-bottom:6px;
+  }
+  .comment-head{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+    margin-bottom:3px;
+  }
+  .comment-author{font-weight:600;color:var(--ink);}
+  .comment-delete{
+    margin-left:auto;
+    border:none;
+    background:none;
+    color:var(--ink-soft);
+    cursor:pointer;
+    font-size:12px;
+    line-height:1;
+    padding:0 2px;
+  }
+  .comment-delete:hover{color:var(--coral);}
+  .comment-text{
+    margin:0;
+    font-size:12.5px;
+    line-height:1.45;
+    white-space:pre-wrap;      /* preserva as quebras de linha digitadas */
+    overflow-wrap:anywhere;    /* url longa não estoura a largura do card */
+  }
+  .comment-empty{
+    font-size:11px;
+    font-style:italic;
+    color:var(--ink-soft);
+    margin:0 0 8px;
+  }
+  .comment-add{display:flex;gap:6px;align-items:flex-end;}
+  .comment-add textarea{
+    flex:1;
+    min-width:0;
+    resize:vertical;
+    font-family:'Inter',sans-serif;
+    font-size:12.5px;
+    line-height:1.4;
+    padding:6px 8px;
+    border:1px solid rgba(0,0,0,0.15);
+    border-radius:7px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .comment-add textarea::placeholder{color:#8d95a6;}
+  .comment-add textarea:focus{outline:none;border-color:var(--amber-dim);}
+  .comment-add button{
+    flex-shrink:0;
+    border:none;
+    background:var(--navy-900);
+    color:var(--paper);
+    border-radius:7px;
+    padding:8px 11px;
+    font-family:'Inter',sans-serif;
+    font-size:11px;
+    cursor:pointer;
+  }
+  .comment-add button:hover{background:var(--navy-800);}
+  .comment-hint{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:9px;
+    color:var(--ink-soft);
+    margin:4px 0 0;
+  }
 
   .card-actions{
     display:flex;
@@ -963,6 +1049,24 @@ function seedOrders(){
   return changed;
 }
 
+// Painéis expansíveis do card (checklist e comentários). O estado fica aqui
+// e não no DOM porque render() reconstrói os cards a cada alteração — sem
+// isso, comentar fecharia o painel na cara de quem está escrevendo.
+const openPanels = new Set();
+
+// Mesmo motivo: um comentário não enviado ainda sobreviveria a um render()
+// disparado por qualquer outra ação no painel.
+const commentDrafts = new Map();
+
+function isPanelOpen(panelId){ return openPanels.has(panelId); }
+
+function togglePanel(panelId){
+  const el = document.getElementById(panelId);
+  if(!el) return;
+  if(el.classList.toggle('open')) openPanels.add(panelId);
+  else openPanels.delete(panelId);
+}
+
 function buildCard(t){
   const card = document.createElement('div');
   card.className = 'card' + (t.queue ? ' parked' : '');
@@ -971,6 +1075,7 @@ function buildCard(t){
   const overdue = isOverdue(t);
   const checklist = t.checklist || [];
   const clDone = checklist.filter(c=>c.done).length;
+  const comments = t.comments || [];
   const parkButtons = QUEUES
     .filter(q => q.id !== t.queue)
     .map(q => `<button data-action="park" data-id="${t.id}" data-queue="${q.id}" title="Mover para ${q.label}">${q.icon}</button>`)
@@ -989,14 +1094,31 @@ function buildCard(t){
         <span class="badge prio-${t.priority}">${t.priority}</span>
         ${t.deadline ? `<span class="badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠ ' : ''}${fmtDate(t.deadline)}</span>` : ''}
         ${checklist.length ? `<span class="badge checklist-badge" data-action="toggle-checklist" data-id="${t.id}">☑ ${clDone}/${checklist.length}</span>` : ''}
+        <span class="badge comment-badge${comments.length ? ' has' : ''}" data-action="toggle-comments" data-id="${t.id}" title="Comentários">💬${comments.length ? ' ' + comments.length : ''}</span>
         ${t.queue ? `<span class="badge">${escapeHtml(t.status)}</span>` : ''}
       </div>
-      ${checklist.length ? `<div class="checklist" id="cl-${t.id}" data-sortable="cl-${t.id}" data-task-id="${t.id}">${checklist.map(c=>`
+      ${checklist.length ? `<div class="checklist${isPanelOpen('cl-'+t.id) ? ' open' : ''}" id="cl-${t.id}" data-sortable="cl-${t.id}" data-task-id="${t.id}">${checklist.map(c=>`
         <div class="checklist-item ${c.done?'done':''}" data-sort-item data-item-id="${c.id}">
           <span class="drag-handle" data-drag-handle title="Arraste para reordenar">⠿</span>
           <input type="checkbox" data-action="toggle-item" data-id="${t.id}" data-item="${c.id}" ${c.done?'checked':''} id="item-${c.id}">
           <label for="item-${c.id}">${escapeHtml(c.text)}</label>
         </div>`).join('')}</div>` : ''}
+      <div class="comments${isPanelOpen('cm-'+t.id) ? ' open' : ''}" id="cm-${t.id}">
+        ${comments.length ? comments.map(c=>`
+        <div class="comment">
+          <div class="comment-head">
+            <span class="comment-author">${escapeHtml(c.author)}</span>
+            <span>${fmtDateTime(c.at)}</span>
+            <button class="comment-delete" data-action="delete-comment" data-id="${t.id}" data-comment="${c.id}" title="Excluir comentário">✕</button>
+          </div>
+          <p class="comment-text">${escapeHtml(c.text)}</p>
+        </div>`).join('') : '<p class="comment-empty">Nenhum comentário ainda.</p>'}
+        <div class="comment-add">
+          <textarea id="cmt-${t.id}" data-id="${t.id}" rows="2" placeholder="Escrever comentário...">${escapeHtml(commentDrafts.get(t.id) || '')}</textarea>
+          <button data-action="add-comment" data-id="${t.id}">Enviar</button>
+        </div>
+        <p class="comment-hint">⌘/Ctrl + Enter para enviar</p>
+      </div>
       ${t.lastEditedBy ? `<div class="edit-log">✎ ${escapeHtml(t.lastEditedBy)} · ${fmtDateTime(t.lastEditedAt)}</div>` : ''}
       <div class="card-actions">
         ${t.queue ? `<button data-action="unpark" data-id="${t.id}">↩ Retomar</button>` : ''}
@@ -1098,11 +1220,18 @@ document.addEventListener('click', async (e)=>{
   const action = btn.dataset.action;
 
   if(action === 'toggle-checklist'){
-    document.getElementById('cl-' + id).classList.toggle('open');
+    togglePanel('cl-' + id);
+    return;
+  }
+  if(action === 'toggle-comments'){
+    togglePanel('cm-' + id);
+    const box = document.getElementById('cmt-' + id);
+    if(box && isPanelOpen('cm-' + id)) box.focus();
     return;
   }
   if(!task) return;
 
+  let refocus = null;
   const fromKey = groupKey(task);
   if(action === 'park'){
     task.queue = btn.dataset.queue;
@@ -1122,9 +1251,29 @@ document.addEventListener('click', async (e)=>{
     task.status = STATUS_ORDER[Math.max(idx-1, 0)];
     landAtEnd(task, fromKey);
     stampEdit(task);
+  } else if(action === 'add-comment'){
+    const box = document.getElementById('cmt-' + id);
+    const text = box ? box.value.trim() : '';
+    if(!text) return;
+    if(!task.comments) task.comments = [];
+    task.comments.push({
+      id: 'c-' + Date.now() + Math.random().toString(36).slice(2,6),
+      author: getCurrentUser() || 'Ambos',
+      text,
+      at: new Date().toISOString(),
+    });
+    stampEdit(task);
+    commentDrafts.delete(id);
+    refocus = 'cmt-' + id;
+  } else if(action === 'delete-comment'){
+    if(!confirm('Excluir este comentário?')) return;
+    task.comments = (task.comments || []).filter(c => c.id !== btn.dataset.comment);
+    stampEdit(task);
   } else if(action === 'delete'){
     if(!confirm('Excluir esta demanda?')) return;
     tasks = tasks.filter(t=>t.id !== id);
+    openPanels.delete('cl-' + id);
+    openPanels.delete('cm-' + id);
   } else if(action === 'edit'){
     openModal(task);
     return;
@@ -1133,6 +1282,26 @@ document.addEventListener('click', async (e)=>{
   }
   await saveTasks();
   render();
+  if(refocus){
+    const box = document.getElementById(refocus);
+    if(box) box.focus();
+  }
+});
+
+document.addEventListener('input', (e)=>{
+  if(!e.target.matches('.comment-add textarea')) return;
+  const id = e.target.dataset.id;
+  if(e.target.value) commentDrafts.set(id, e.target.value);
+  else commentDrafts.delete(id);
+});
+
+// Enviar comentário com ⌘/Ctrl + Enter — Enter sozinho quebra linha.
+document.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+  if(!e.target.matches('.comment-add textarea')) return;
+  e.preventDefault();
+  const send = document.querySelector(`button[data-action="add-comment"][data-id="${e.target.dataset.id}"]`);
+  if(send) send.click();
 });
 
 document.addEventListener('change', async (e)=>{
@@ -1146,7 +1315,6 @@ document.addEventListener('change', async (e)=>{
     stampEdit(task);
     await saveTasks();
     render();
-    document.getElementById('cl-' + id).classList.add('open');
   }
 });
 
@@ -1567,8 +1735,6 @@ async function dropCardChecklistItem(container){
   stampEdit(task);
   await saveTasks();
   render();
-  const reopened = document.getElementById('cl-' + taskId);
-  if(reopened) reopened.classList.add('open');
 }
 
 ensureIdentity();

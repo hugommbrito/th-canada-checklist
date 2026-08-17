@@ -34,6 +34,35 @@ Tarefas parkeadas somem das colunas principais mas continuam contando no total d
 "Concluídas" e no contador de "Atrasadas" — uma demanda travada com prazo vencido
 continua sendo um problema que vale enxergar.
 
+## Comentários por card
+
+Cada card tem um painel de comentários, aberto pelo badge 💬 no card (mostra a
+contagem quando há algum). Serve de thread curta entre os dois — "liguei no
+consulado, pediram o original" — sem precisar editar a demanda.
+
+Cada comentário guarda autor (vem da identidade do navegador, o mesmo "Quem está
+usando?"), data/hora e texto, com quebras de linha preservadas. ⌘/Ctrl + Enter
+envia; Enter sozinho quebra linha.
+
+Comentário não enviado fica guardado em memória enquanto a aba estiver aberta,
+então qualquer outra ação no painel (que redesenha os cards) não apaga o que
+estava sendo escrito. Rascunho não vai para o banco — só o comentário enviado.
+
+## Ordem manual e drag and drop
+
+Cards e itens de checklist são reordenáveis arrastando pela alça ⠿. Cards podem
+mudar de coluna e ir para as filas laterais no arraste; itens de checklist podem
+ser reordenados tanto no card quanto no modal de edição.
+
+O arraste começa pela alça, não pelo card inteiro, por causa do celular: tornar
+o card todo arrastável exigiria `touch-action:none` nele, o que mataria o scroll
+da página. Pela alça, os botões e checkboxes do card continuam clicáveis normalmente.
+
+Cada tarefa guarda um campo `order` e as colunas deixaram de ordenar por prazo —
+ordem manual e ordenação automática não convivem. Na primeira carga o `order` é
+semeado a partir da ordenação por prazo anterior, então nada muda de lugar
+sozinho. O aviso de atraso (⚠) continua igual.
+
 ## Rodando localmente
 
 ```bash
@@ -62,6 +91,8 @@ Conforme o handoff original, esta etapa só migrou o storage (Claude.ai artifact
 + Express) e adicionou o gate leve de identidade. Ficam para depois, se fizer sentido:
 
 - Refactor de categoria por `id` estável (hoje ainda é por nome, como no protótipo)
-- Campo de notas/observações por tarefa
 - Filtro por "atrasadas" / "prazo esta semana"
+- Edição de comentário já enviado (hoje só dá para excluir e escrever outro)
+- Aviso de comentário novo do outro lado (não há push nem polling — só aparece
+  ao recarregar a página)
 - Qualquer autenticação real, caso o link privado deixe de ser suficiente
