@@ -142,7 +142,7 @@
     align-items:center;
     margin:18px 0 18px;
   }
-  select, .add-btn{
+  .toolbar select, .add-btn{
     font-family:'Inter',sans-serif;
     font-size:13px;
     padding:9px 14px;
@@ -379,10 +379,13 @@
     font-size:10px;
     letter-spacing:.08em;
     text-transform:uppercase;
-    color:var(--ink-soft);
+    color:#4a5468;
     margin-bottom:5px;
   }
-  .field input, .field select{
+  /* Só campos de texto/data/select — o :not() evita esticar os checkboxes
+     do editor de checklist, que são filhos de .field e viravam barras de
+     largura total, esmagando o input de texto ao lado. */
+  .field input:not([type=checkbox]), .field select{
     width:100%;
     padding:9px 10px;
     border-radius:7px;
@@ -390,7 +393,9 @@
     font-family:'Inter',sans-serif;
     font-size:14px;
     background:#fff;
+    color:var(--ink);
   }
+  .field input::placeholder{color:#8d95a6;}
   .cat-row{display:flex;gap:8px;}
   .cat-row select{flex:1;}
   .cat-row button{
@@ -416,14 +421,29 @@
     align-items:center;
     gap:6px;
     padding:4px 2px;
+    border-radius:6px;
+  }
+  .checklist-editor .ci-row input[type=checkbox]{
+    flex:none;
+    width:15px;
+    height:15px;
+    margin:0;
+    accent-color:var(--teal);
   }
   .checklist-editor .ci-row input[type=text]{
     flex:1;
+    min-width:0;
     border:none;
     font-size:13px;
-    padding:4px 2px;
+    padding:5px 6px;
+    background:transparent;
+    color:var(--ink);
+    border-radius:5px;
   }
-  .checklist-editor .ci-row input[type=text]:focus{outline:none;}
+  .checklist-editor .ci-row input[type=text]:focus{
+    outline:none;
+    background:#f6f1e4;
+  }
   .checklist-editor .ci-row button{
     border:none;
     background:none;
@@ -526,6 +546,53 @@
     color:var(--ink-soft);
     padding-top:6px;
   }
+
+  /* ---- Drag and drop ---- */
+  .drag-handle{
+    cursor:grab;
+    touch-action:none;          /* o dedo arrasta o item, não rola a página */
+    user-select:none;
+    -webkit-user-select:none;
+    flex-shrink:0;
+    line-height:1;
+    color:var(--ink-soft);
+    font-size:13px;
+    padding:2px 1px;
+  }
+  .drag-handle:hover{color:var(--ink);}
+  .drag-handle:active{cursor:grabbing;}
+  .tag-left{display:flex;align-items:center;gap:8px;min-width:0;}
+  .checklist-item .drag-handle{font-size:11px;opacity:.45;}
+  .checklist-item:hover .drag-handle{opacity:1;}
+
+  body.is-dragging{cursor:grabbing;}
+  body.is-dragging *{user-select:none !important;}
+  body.is-dragging .empty{display:none;}
+  body.is-dragging .cards{min-height:56px;}
+
+  .drag-ghost{
+    position:fixed;
+    z-index:200;
+    margin:0;
+    pointer-events:none;
+    transform:rotate(1.2deg);
+    box-shadow:0 18px 40px rgba(0,0,0,0.45);
+  }
+  /* .ci-row e .checklist-item não têm fundo próprio — o clone flutuante
+     precisa de um para não ficar transparente sobre o resto da página. */
+  .drag-ghost.ci-row, .drag-ghost.checklist-item{
+    background:var(--paper);
+    border-radius:8px;
+    box-shadow:0 12px 26px rgba(0,0,0,0.3);
+  }
+  .drag-source{opacity:.3;}
+  .column.drop-active{
+    border-color:var(--amber);
+    background:rgba(232,163,61,0.07);
+  }
+  .checklist-editor.drop-active, .checklist.drop-active{
+    background:rgba(232,163,61,0.08);
+  }
 </style>
 </head>
 <body>
@@ -574,15 +641,15 @@
   <div class="board">
     <div class="column" data-status="A fazer">
       <div class="column-head"><span>A fazer</span><span class="count" id="count-A fazer">0</span></div>
-      <div class="cards" id="cards-A fazer"></div>
+      <div class="cards" id="cards-A fazer" data-sortable="cards" data-status="A fazer"></div>
     </div>
     <div class="column" data-status="Em andamento">
       <div class="column-head"><span>Em andamento</span><span class="count" id="count-Em andamento">0</span></div>
-      <div class="cards" id="cards-Em andamento"></div>
+      <div class="cards" id="cards-Em andamento" data-sortable="cards" data-status="Em andamento"></div>
     </div>
     <div class="column" data-status="Concluído">
       <div class="column-head"><span>Concluído</span><span class="count" id="count-Concluído">0</span></div>
-      <div class="cards" id="cards-Concluído"></div>
+      <div class="cards" id="cards-Concluído" data-sortable="cards" data-status="Concluído"></div>
     </div>
   </div>
 
@@ -590,11 +657,11 @@
   <div class="board-secondary">
     <div class="column parked">
       <div class="column-head"><span>🚫 Bloqueado</span><span class="count" id="count-q-blocked">0</span></div>
-      <div class="cards" id="cards-q-blocked"></div>
+      <div class="cards" id="cards-q-blocked" data-sortable="cards" data-queue="blocked"></div>
     </div>
     <div class="column parked">
       <div class="column-head"><span>⏳ Aguardando terceiros</span><span class="count" id="count-q-waiting">0</span></div>
-      <div class="cards" id="cards-q-waiting"></div>
+      <div class="cards" id="cards-q-waiting" data-sortable="cards" data-queue="waiting"></div>
     </div>
   </div>
 
@@ -638,7 +705,7 @@
     <div class="field">
       <label>Checklist (opcional)</label>
       <div class="checklist-editor">
-        <div id="ciList"></div>
+        <div id="ciList" data-sortable="ci"></div>
         <div class="ci-add-row">
           <input type="text" id="ciNewText" placeholder="Adicionar item do checklist...">
           <button type="button" id="ciAddBtn">Add</button>
@@ -737,6 +804,8 @@ async function loadAll(){
     const res = await kvGet(STORAGE_KEY);
     tasks = res && res.value ? JSON.parse(res.value) : [];
   }catch(e){ tasks = []; }
+
+  if(seedOrders()) await saveTasks();
 
   populateCategorySelects();
   render();
@@ -851,9 +920,54 @@ const QUEUES = [
   { id: 'waiting', label: 'Aguardando terceiros', icon: '⏳' },
 ];
 
+// ---- Ordem manual dos cards ----
+// Cada tarefa guarda um `order` numérico usado para ordenar dentro da sua
+// coluna. Não precisa ser único no painel inteiro: a ordenação sempre
+// acontece dentro de um grupo (status ou fila lateral).
+function groupKey(t){ return t.queue ? 'q:' + t.queue : 's:' + t.status; }
+
+function tasksInGroup(key, exclude){
+  return tasks.filter(t => groupKey(t) === key && t !== exclude);
+}
+
+function renumberGroup(key){
+  tasksInGroup(key)
+    .sort((a,b)=> (a.order ?? 0) - (b.order ?? 0))
+    .forEach((t,i)=>{ t.order = i; });
+}
+
+function nextOrderFor(key, exclude){
+  const list = tasksInGroup(key, exclude);
+  return list.length ? Math.max(...list.map(t => t.order ?? 0)) + 1 : 0;
+}
+
+// Primeira carga de dados antigos: semeia `order` a partir da ordenação por
+// prazo que o painel usava antes, para nada mudar de lugar sozinho.
+function seedOrders(){
+  let changed = false;
+  const groups = new Map();
+  tasks.forEach(t=>{
+    const key = groupKey(t);
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(t);
+  });
+  groups.forEach(list=>{
+    list.sort((a,b)=>{
+      const ao = typeof a.order === 'number' ? a.order : Infinity;
+      const bo = typeof b.order === 'number' ? b.order : Infinity;
+      if(ao !== bo) return ao - bo;
+      return (a.deadline||'9999').localeCompare(b.deadline||'9999');
+    });
+    list.forEach((t,i)=>{ if(t.order !== i){ t.order = i; changed = true; } });
+  });
+  return changed;
+}
+
 function buildCard(t){
   const card = document.createElement('div');
   card.className = 'card' + (t.queue ? ' parked' : '');
+  card.dataset.id = t.id;
+  card.setAttribute('data-sort-item', '');
   const overdue = isOverdue(t);
   const checklist = t.checklist || [];
   const clDone = checklist.filter(c=>c.done).length;
@@ -863,7 +977,10 @@ function buildCard(t){
     .join('');
   card.innerHTML = `
     <div class="card-tag">
-      <span class="cat-pill" style="background:${colorForCategory(t.category)}">${escapeHtml(t.category)}</span>
+      <span class="tag-left">
+        <span class="drag-handle" data-drag-handle title="Arraste para reordenar ou mudar de coluna">⠿</span>
+        <span class="cat-pill" style="background:${colorForCategory(t.category)}">${escapeHtml(t.category)}</span>
+      </span>
       <span>${t.owner}</span>
     </div>
     <div class="card-body">
@@ -874,8 +991,9 @@ function buildCard(t){
         ${checklist.length ? `<span class="badge checklist-badge" data-action="toggle-checklist" data-id="${t.id}">☑ ${clDone}/${checklist.length}</span>` : ''}
         ${t.queue ? `<span class="badge">${escapeHtml(t.status)}</span>` : ''}
       </div>
-      ${checklist.length ? `<div class="checklist" id="cl-${t.id}">${checklist.map(c=>`
-        <div class="checklist-item ${c.done?'done':''}">
+      ${checklist.length ? `<div class="checklist" id="cl-${t.id}" data-sortable="cl-${t.id}" data-task-id="${t.id}">${checklist.map(c=>`
+        <div class="checklist-item ${c.done?'done':''}" data-sort-item data-item-id="${c.id}">
+          <span class="drag-handle" data-drag-handle title="Arraste para reordenar">⠿</span>
           <input type="checkbox" data-action="toggle-item" data-id="${t.id}" data-item="${c.id}" ${c.done?'checked':''} id="item-${c.id}">
           <label for="item-${c.id}">${escapeHtml(c.text)}</label>
         </div>`).join('')}</div>` : ''}
@@ -900,7 +1018,7 @@ function fillColumn(container, countEl, list){
     container.innerHTML = '<div class="empty">Nenhuma demanda aqui.</div>';
     return;
   }
-  list.sort((a,b)=> (a.deadline||'9999').localeCompare(b.deadline||'9999'));
+  list.sort((a,b)=> (a.order ?? 0) - (b.order ?? 0));
   list.forEach(t=> container.appendChild(buildCard(t)));
 }
 
@@ -955,6 +1073,16 @@ function render(){
 
 const STATUS_ORDER = ['A fazer','Em andamento','Concluído'];
 
+// Card movido por botão entra no fim da coluna de destino, em vez de cair
+// no meio da lista com a ordem que tinha na coluna anterior.
+function landAtEnd(task, fromKey){
+  const toKey = groupKey(task);
+  if(toKey === fromKey) return;
+  task.order = nextOrderFor(toKey, task);
+  renumberGroup(fromKey);
+  renumberGroup(toKey);
+}
+
 document.addEventListener('click', async (e)=>{
   const chip = e.target.closest('.cat-chip');
   if(chip){
@@ -975,19 +1103,24 @@ document.addEventListener('click', async (e)=>{
   }
   if(!task) return;
 
+  const fromKey = groupKey(task);
   if(action === 'park'){
     task.queue = btn.dataset.queue;
+    landAtEnd(task, fromKey);
     stampEdit(task);
   } else if(action === 'unpark'){
     task.queue = null;
+    landAtEnd(task, fromKey);
     stampEdit(task);
   } else if(action === 'advance'){
     const idx = STATUS_ORDER.indexOf(task.status);
     task.status = STATUS_ORDER[Math.min(idx+1, 2)];
+    landAtEnd(task, fromKey);
     stampEdit(task);
   } else if(action === 'back'){
     const idx = STATUS_ORDER.indexOf(task.status);
     task.status = STATUS_ORDER[Math.max(idx-1, 0)];
+    landAtEnd(task, fromKey);
     stampEdit(task);
   } else if(action === 'delete'){
     if(!confirm('Excluir esta demanda?')) return;
@@ -1024,13 +1157,20 @@ document.getElementById('moveDateInput').addEventListener('change', (e)=>{
 });
 
 // ---- Task modal ----
+function newChecklistId(){
+  return 'ci-' + Date.now() + Math.random().toString(36).slice(2,6);
+}
+
 function renderChecklistEditor(){
   const list = document.getElementById('ciList');
   list.innerHTML = '';
   editingChecklist.forEach((item, idx)=>{
     const row = document.createElement('div');
     row.className = 'ci-row';
+    row.setAttribute('data-sort-item', '');
+    row.dataset.itemId = item.id;
     row.innerHTML = `
+      <span class="drag-handle" data-drag-handle title="Arraste para reordenar">⠿</span>
       <input type="checkbox" ${item.done ? 'checked' : ''} data-idx="${idx}" class="ci-done">
       <input type="text" value="${escapeHtml(item.text)}" data-idx="${idx}" class="ci-text">
       <button type="button" data-idx="${idx}" class="ci-remove">✕</button>
@@ -1053,7 +1193,7 @@ document.getElementById('ciAddBtn').addEventListener('click', ()=>{
   const input = document.getElementById('ciNewText');
   const text = input.value.trim();
   if(!text) return;
-  editingChecklist.push({ id: 'ci-' + Date.now() + Math.random().toString(36).slice(2,6), text, done:false });
+  editingChecklist.push({ id: newChecklistId(), text, done:false });
   input.value = '';
   renderChecklistEditor();
 });
@@ -1064,6 +1204,7 @@ document.getElementById('ciNewText').addEventListener('keydown', (e)=>{
 function openModal(task){
   editingId = task ? task.id : null;
   editingChecklist = task && task.checklist ? JSON.parse(JSON.stringify(task.checklist)) : [];
+  editingChecklist.forEach(item=>{ if(!item.id) item.id = newChecklistId(); });
   document.getElementById('modalTitle').textContent = task ? 'Editar demanda' : 'Nova demanda';
   document.getElementById('fTitle').value = task ? task.title : '';
   populateCategorySelects();
@@ -1104,7 +1245,7 @@ document.getElementById('saveModal').addEventListener('click', async ()=>{
     Object.assign(t, data);
     stampEdit(t);
   } else {
-    const t = { id: 'task-' + Date.now(), status: 'A fazer', ...data };
+    const t = { id: 'task-' + Date.now(), status: 'A fazer', order: nextOrderFor('s:A fazer'), ...data };
     stampEdit(t);
     tasks.push(t);
   }
@@ -1231,6 +1372,204 @@ document.getElementById('closeManageCatModal').addEventListener('click', ()=>{
 document.getElementById('manageCatBackdrop').addEventListener('click', (e)=>{
   if(e.target.id === 'manageCatBackdrop') document.getElementById('manageCatBackdrop').classList.remove('open');
 });
+
+// ---- Drag and drop (pointer events: funciona com mouse e com toque) ----
+//
+// Motor genérico e delegado no document, porque render() recria os cards a
+// cada mudança — não dá para registrar listeners nos elementos.
+//   [data-sortable="grupo"]  → container que aceita soltar
+//   [data-sort-item]         → item arrastável dentro do container
+//   [data-drag-handle]       → a alça; só ela inicia o arraste, então botões,
+//                              checkboxes e o scroll da página seguem normais
+// Itens só viajam entre containers do mesmo grupo.
+
+let dragState = null;
+let autoScrollTimer = null;
+let pointerY = 0;
+
+function sortableContainers(group){
+  return [...document.querySelectorAll('[data-sortable]')]
+    .filter(c => c.dataset.sortable === group);
+}
+
+function containerFromPoint(x, y, group){
+  const list = sortableContainers(group);
+  for(const c of list){
+    const box = c.closest('.column') || c;
+    const r = box.getBoundingClientRect();
+    if(x >= r.left && x <= r.right && y >= r.top - 10 && y <= r.bottom + 10) return c;
+  }
+  // Grupo de container único (checklists): mantém o alvo mesmo se o ponteiro
+  // sair da caixa, senão reordenar o primeiro item fica impossível.
+  return list.length === 1 ? list[0] : null;
+}
+
+function itemAfterPoint(container, y, dragged){
+  const items = [...container.querySelectorAll(':scope > [data-sort-item]')]
+    .filter(el => el !== dragged);
+  for(const el of items){
+    const r = el.getBoundingClientRect();
+    if(y < r.top + r.height / 2) return el;
+  }
+  return null;
+}
+
+function highlightTarget(container){
+  document.querySelectorAll('.drop-active').forEach(el=>el.classList.remove('drop-active'));
+  if(!container) return;
+  const box = container.closest('.column') || container.closest('.checklist-editor') || container;
+  box.classList.add('drop-active');
+}
+
+function autoScrollTick(){
+  const margin = 90;
+  if(pointerY < margin) window.scrollBy(0, -14);
+  else if(pointerY > window.innerHeight - margin) window.scrollBy(0, 14);
+}
+
+document.addEventListener('pointerdown', (e)=>{
+  if(e.button !== 0 || !e.isPrimary || dragState) return;
+  const handle = e.target.closest('[data-drag-handle]');
+  if(!handle) return;
+  const item = handle.closest('[data-sort-item]');
+  const container = item && item.closest('[data-sortable]');
+  if(!item || !container) return;
+
+  e.preventDefault();
+
+  const rect = item.getBoundingClientRect();
+  const ghost = item.cloneNode(true);
+  ghost.classList.add('drag-ghost');
+  // O clone fica no mesmo pai (fora do fluxo, position:fixed) para que os
+  // seletores descendentes do CSS continuem valendo nele. Sem [data-sort-item]
+  // e sem ids, ele não é confundido com um item real nem duplica ids.
+  ghost.removeAttribute('data-sort-item');
+  ghost.removeAttribute('id');
+  ghost.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+  ghost.style.width = rect.width + 'px';
+  ghost.style.height = rect.height + 'px';
+  ghost.style.left = rect.left + 'px';
+  ghost.style.top = rect.top + 'px';
+  item.parentElement.appendChild(ghost);
+  item.classList.add('drag-source');
+  document.body.classList.add('is-dragging');
+
+  dragState = {
+    item, ghost,
+    group: container.dataset.sortable,
+    grabX: e.clientX - rect.left,
+    grabY: e.clientY - rect.top,
+    fromContainer: container,
+    fromNext: item.nextElementSibling,
+  };
+  pointerY = e.clientY;
+  autoScrollTimer = setInterval(autoScrollTick, 16);
+
+  window.addEventListener('pointermove', onDragMove, { passive:false });
+  window.addEventListener('pointerup', onDragEnd);
+  window.addEventListener('pointercancel', onDragEnd);
+});
+
+function onDragMove(e){
+  const s = dragState;
+  if(!s) return;
+  e.preventDefault();
+  pointerY = e.clientY;
+  s.ghost.style.left = (e.clientX - s.grabX) + 'px';
+  s.ghost.style.top = (e.clientY - s.grabY) + 'px';
+
+  const target = containerFromPoint(e.clientX, e.clientY, s.group);
+  highlightTarget(target);
+  if(!target) return;
+
+  const after = itemAfterPoint(target, e.clientY, s.item);
+  if(after) target.insertBefore(s.item, after);
+  else target.appendChild(s.item);
+}
+
+async function onDragEnd(){
+  const s = dragState;
+  if(!s) return;
+  dragState = null;
+
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', onDragEnd);
+  window.removeEventListener('pointercancel', onDragEnd);
+  clearInterval(autoScrollTimer);
+  autoScrollTimer = null;
+
+  s.ghost.remove();
+  s.item.classList.remove('drag-source');
+  document.body.classList.remove('is-dragging');
+  highlightTarget(null);
+
+  const toContainer = s.item.closest('[data-sortable]');
+  if(!toContainer) return;
+  const moved = toContainer !== s.fromContainer || s.item.nextElementSibling !== s.fromNext;
+  if(!moved) return;
+
+  if(s.group === 'cards') await dropCard(s.item, s.fromContainer, toContainer);
+  else if(s.group === 'ci') dropChecklistEditorItem(toContainer);
+  else if(s.group.startsWith('cl-')) await dropCardChecklistItem(toContainer);
+}
+
+async function dropCard(item, fromContainer, toContainer){
+  const task = tasks.find(t => t.id === item.dataset.id);
+  if(!task) return;
+
+  const fromKey = groupKey(task);
+  if(toContainer.dataset.queue){
+    task.queue = toContainer.dataset.queue;   // status original é preservado
+  } else {
+    task.queue = null;
+    task.status = toContainer.dataset.status;
+  }
+  const toKey = groupKey(task);
+
+  // Ordem calculada a partir dos vizinhos visíveis: com um filtro de
+  // categoria ativo, soltar entre dois cards visíveis não embaralha os
+  // cards escondidos que estão entre eles.
+  const siblings = [...toContainer.querySelectorAll(':scope > .card')];
+  const idx = siblings.indexOf(item);
+  const orderOf = el => {
+    const t = tasks.find(x => x.id === el.dataset.id);
+    return t && typeof t.order === 'number' ? t.order : 0;
+  };
+  const before = siblings[idx - 1];
+  const after = siblings[idx + 1];
+  if(before && after) task.order = (orderOf(before) + orderOf(after)) / 2;
+  else if(before) task.order = orderOf(before) + 1;
+  else if(after) task.order = orderOf(after) - 1;
+  else task.order = 0;
+
+  renumberGroup(toKey);
+  if(fromKey !== toKey) renumberGroup(fromKey);
+
+  stampEdit(task);
+  await saveTasks();
+  render();
+}
+
+function dropChecklistEditorItem(container){
+  const order = [...container.querySelectorAll(':scope > [data-sort-item]')]
+    .map(el => el.dataset.itemId);
+  editingChecklist.sort((a,b)=> order.indexOf(a.id) - order.indexOf(b.id));
+  renderChecklistEditor();
+}
+
+async function dropCardChecklistItem(container){
+  const taskId = container.dataset.taskId;
+  const task = tasks.find(t => t.id === taskId);
+  if(!task || !task.checklist) return;
+  const order = [...container.querySelectorAll(':scope > [data-sort-item]')]
+    .map(el => el.dataset.itemId);
+  task.checklist.sort((a,b)=> order.indexOf(a.id) - order.indexOf(b.id));
+  stampEdit(task);
+  await saveTasks();
+  render();
+  const reopened = document.getElementById('cl-' + taskId);
+  if(reopened) reopened.classList.add('open');
+}
 
 ensureIdentity();
 loadAll();
