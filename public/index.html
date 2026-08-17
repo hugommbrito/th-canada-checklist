@@ -178,6 +178,38 @@
   }
   @media (max-width:820px){.board{grid-template-columns:1fr;}}
 
+  /* Filas laterais — fora do fluxo A fazer → Em andamento → Concluído */
+  .secondary-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:#6d7794;
+    margin:28px 0 12px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .secondary-label::after{
+    content:"";
+    flex:1;
+    border-bottom:1px dashed rgba(246,241,228,0.14);
+  }
+  .board-secondary{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:18px;
+  }
+  @media (max-width:820px){.board-secondary{grid-template-columns:1fr;}}
+  .column.parked{
+    background:rgba(255,255,255,0.015);
+    border-style:dashed;
+  }
+  .card.parked{
+    background:var(--paper-dim);
+    opacity:.92;
+  }
+
   .column{
     background:rgba(255,255,255,0.02);
     border:1px solid var(--navy-700);
@@ -280,10 +312,18 @@
 
   .card-actions{
     display:flex;
+    flex-wrap:wrap;
+    align-items:center;
     gap:6px;
     border-top:1px dashed rgba(0,0,0,0.12);
     padding-top:9px;
   }
+  .card-actions .park-group{
+    display:flex;
+    gap:2px;
+    margin-left:auto;
+  }
+  .card-actions .park-group button{font-size:13px;padding:2px 5px;line-height:1.2;}
   .card-actions button{
     font-family:'Inter',sans-serif;
     font-size:11px;
@@ -545,6 +585,19 @@
       <div class="cards" id="cards-Concluído"></div>
     </div>
   </div>
+
+  <div class="secondary-label">Fora do fluxo</div>
+  <div class="board-secondary">
+    <div class="column parked">
+      <div class="column-head"><span>🚫 Bloqueado</span><span class="count" id="count-q-blocked">0</span></div>
+      <div class="cards" id="cards-q-blocked"></div>
+    </div>
+    <div class="column parked">
+      <div class="column-head"><span>⏳ Aguardando terceiros</span><span class="count" id="count-q-waiting">0</span></div>
+      <div class="cards" id="cards-q-waiting"></div>
+    </div>
+  </div>
+
   <p class="status-note" id="statusNote">Carregando painel…</p>
 </main>
 
@@ -790,6 +843,67 @@ function populateCategorySelects(){
 
 let activeCatFilter = '';
 
+// Filas laterais: guardadas em task.queue (slug, não rótulo — renomear o rótulo
+// não quebra os dados). O task.status original é preservado, então "Retomar"
+// devolve o card exatamente para a coluna de onde ele saiu.
+const QUEUES = [
+  { id: 'blocked', label: 'Bloqueado', icon: '🚫' },
+  { id: 'waiting', label: 'Aguardando terceiros', icon: '⏳' },
+];
+
+function buildCard(t){
+  const card = document.createElement('div');
+  card.className = 'card' + (t.queue ? ' parked' : '');
+  const overdue = isOverdue(t);
+  const checklist = t.checklist || [];
+  const clDone = checklist.filter(c=>c.done).length;
+  const parkButtons = QUEUES
+    .filter(q => q.id !== t.queue)
+    .map(q => `<button data-action="park" data-id="${t.id}" data-queue="${q.id}" title="Mover para ${q.label}">${q.icon}</button>`)
+    .join('');
+  card.innerHTML = `
+    <div class="card-tag">
+      <span class="cat-pill" style="background:${colorForCategory(t.category)}">${escapeHtml(t.category)}</span>
+      <span>${t.owner}</span>
+    </div>
+    <div class="card-body">
+      <p class="card-title">${escapeHtml(t.title)}</p>
+      <div class="card-meta">
+        <span class="badge prio-${t.priority}">${t.priority}</span>
+        ${t.deadline ? `<span class="badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠ ' : ''}${fmtDate(t.deadline)}</span>` : ''}
+        ${checklist.length ? `<span class="badge checklist-badge" data-action="toggle-checklist" data-id="${t.id}">☑ ${clDone}/${checklist.length}</span>` : ''}
+        ${t.queue ? `<span class="badge">${escapeHtml(t.status)}</span>` : ''}
+      </div>
+      ${checklist.length ? `<div class="checklist" id="cl-${t.id}">${checklist.map(c=>`
+        <div class="checklist-item ${c.done?'done':''}">
+          <input type="checkbox" data-action="toggle-item" data-id="${t.id}" data-item="${c.id}" ${c.done?'checked':''} id="item-${c.id}">
+          <label for="item-${c.id}">${escapeHtml(c.text)}</label>
+        </div>`).join('')}</div>` : ''}
+      ${t.lastEditedBy ? `<div class="edit-log">✎ ${escapeHtml(t.lastEditedBy)} · ${fmtDateTime(t.lastEditedAt)}</div>` : ''}
+      <div class="card-actions">
+        ${t.queue ? `<button data-action="unpark" data-id="${t.id}">↩ Retomar</button>` : ''}
+        ${!t.queue && t.status !== 'A fazer' ? `<button data-action="back" data-id="${t.id}">← Voltar</button>` : ''}
+        ${!t.queue && t.status !== 'Concluído' ? `<button data-action="advance" data-id="${t.id}">Avançar →</button>` : ''}
+        <button data-action="edit" data-id="${t.id}">Editar</button>
+        <button data-action="delete" data-id="${t.id}" class="danger">Excluir</button>
+        <span class="park-group">${parkButtons}</span>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+function fillColumn(container, countEl, list){
+  countEl.textContent = list.length;
+  container.innerHTML = '';
+  if(list.length === 0){
+    container.innerHTML = '<div class="empty">Nenhuma demanda aqui.</div>';
+    return;
+  }
+  list.sort((a,b)=> (a.deadline||'9999').localeCompare(b.deadline||'9999'));
+  list.forEach(t=> container.appendChild(buildCard(t)));
+}
+
 function render(){
   const catFilter = activeCatFilter;
   const ownerFilter = document.getElementById('filterOwner').value;
@@ -812,50 +926,22 @@ function render(){
     (!ownerFilter || t.owner === ownerFilter)
   );
 
+  const onBoard = filtered.filter(t => !t.queue);
+
   ['A fazer','Em andamento','Concluído'].forEach(status=>{
-    const container = document.getElementById('cards-' + status);
-    const list = filtered.filter(t => t.status === status);
-    document.getElementById('count-' + status).textContent = list.length;
-    container.innerHTML = '';
-    if(list.length === 0){
-      container.innerHTML = '<div class="empty">Nenhuma demanda aqui.</div>';
-      return;
-    }
-    list.sort((a,b)=> (a.deadline||'9999').localeCompare(b.deadline||'9999'));
-    list.forEach(t=>{
-      const card = document.createElement('div');
-      card.className = 'card';
-      const overdue = isOverdue(t);
-      const checklist = t.checklist || [];
-      const clDone = checklist.filter(c=>c.done).length;
-      card.innerHTML = `
-        <div class="card-tag">
-          <span class="cat-pill" style="background:${colorForCategory(t.category)}">${escapeHtml(t.category)}</span>
-          <span>${t.owner}</span>
-        </div>
-        <div class="card-body">
-          <p class="card-title">${escapeHtml(t.title)}</p>
-          <div class="card-meta">
-            <span class="badge prio-${t.priority}">${t.priority}</span>
-            ${t.deadline ? `<span class="badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠ ' : ''}${fmtDate(t.deadline)}</span>` : ''}
-            ${checklist.length ? `<span class="badge checklist-badge" data-action="toggle-checklist" data-id="${t.id}">☑ ${clDone}/${checklist.length}</span>` : ''}
-          </div>
-          ${checklist.length ? `<div class="checklist" id="cl-${t.id}">${checklist.map(c=>`
-            <div class="checklist-item ${c.done?'done':''}">
-              <input type="checkbox" data-action="toggle-item" data-id="${t.id}" data-item="${c.id}" ${c.done?'checked':''} id="item-${c.id}">
-              <label for="item-${c.id}">${escapeHtml(c.text)}</label>
-            </div>`).join('')}</div>` : ''}
-          ${t.lastEditedBy ? `<div class="edit-log">✎ ${escapeHtml(t.lastEditedBy)} · ${fmtDateTime(t.lastEditedAt)}</div>` : ''}
-          <div class="card-actions">
-            ${status !== 'A fazer' ? `<button data-action="back" data-id="${t.id}">← Voltar</button>` : ''}
-            ${status !== 'Concluído' ? `<button data-action="advance" data-id="${t.id}">Avançar →</button>` : ''}
-            <button data-action="edit" data-id="${t.id}">Editar</button>
-            <button data-action="delete" data-id="${t.id}" class="danger">Excluir</button>
-          </div>
-        </div>
-      `;
-      container.appendChild(card);
-    });
+    fillColumn(
+      document.getElementById('cards-' + status),
+      document.getElementById('count-' + status),
+      onBoard.filter(t => t.status === status)
+    );
+  });
+
+  QUEUES.forEach(q=>{
+    fillColumn(
+      document.getElementById('cards-q-' + q.id),
+      document.getElementById('count-q-' + q.id),
+      filtered.filter(t => t.queue === q.id)
+    );
   });
 
   const total = tasks.length;
@@ -889,7 +975,13 @@ document.addEventListener('click', async (e)=>{
   }
   if(!task) return;
 
-  if(action === 'advance'){
+  if(action === 'park'){
+    task.queue = btn.dataset.queue;
+    stampEdit(task);
+  } else if(action === 'unpark'){
+    task.queue = null;
+    stampEdit(task);
+  } else if(action === 'advance'){
     const idx = STATUS_ORDER.indexOf(task.status);
     task.status = STATUS_ORDER[Math.min(idx+1, 2)];
     stampEdit(task);

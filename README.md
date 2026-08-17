@@ -20,6 +20,20 @@ Express bem pequeno.
   "Quem está usando?" (Hugo / Taís / Ambos) e guarda a resposta em `localStorage`. Toda
   edição de tarefa carimba `lastEditedBy` + `lastEditedAt`, exibido no rodapé do card.
 
+## Filas laterais
+
+Além do fluxo A fazer → Em andamento → Concluído, há duas filas fora do fluxo:
+**🚫 Bloqueado** e **⏳ Aguardando terceiros**, exibidas abaixo do board principal.
+
+Não são etapas — são um desvio. Cada card tem um botão de ícone que o manda para uma
+delas, e um botão "↩ Retomar" que o traz de volta. O `status` original fica preservado
+no campo (o card parkeado mostra um badge com ele), então retomar devolve a demanda
+exatamente para a coluna de onde ela saiu.
+
+Tarefas parkeadas somem das colunas principais mas continuam contando no total de
+"Concluídas" e no contador de "Atrasadas" — uma demanda travada com prazo vencido
+continua sendo um problema que vale enxergar.
+
 ## Rodando localmente
 
 ```bash
