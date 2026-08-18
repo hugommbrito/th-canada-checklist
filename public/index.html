@@ -979,12 +979,20 @@
   }
   .rc-remove:hover{background:rgba(217,99,90,0.15);color:var(--coral);}
   .rc-add-row{display:flex;gap:6px;margin-top:8px;}
-  .rc-add-row input{
+  /* Precisa vencer .field input:not([type=checkbox]), que impõe width:100% a
+     todo campo do modal — num flex isso vira a base de tamanho, e a data ficava
+     com a linha inteira enquanto o valor colapsava para 22px. Aquele seletor
+     tem especificidade (0,2,1) por causa do [type=checkbox], então o .field
+     aqui não é decorativo: sem ele esta regra perde e não faz nada. */
+  .field .rc-add-row input{
+    width:auto;min-width:0;
     padding:7px 9px;border-radius:6px;border:1px solid #d8cfb6;
     font-family:'Inter',sans-serif;font-size:13px;background:#fff;color:var(--ink);
   }
-  .rc-add-row #rcAmount{flex:1 1 auto;min-width:0;}
-  .rc-add-row #rcDate{flex:0 0 auto;}
+  .field .rc-add-row #rcAmount{flex:1 1 auto;}
+  /* A data não encolhe: ela precisa dos ~125px que o dd/mm/yyyy e o ícone
+     ocupam. Quem cede espaço sob pressão é o campo de valor. */
+  .field .rc-add-row #rcDate{flex:0 0 auto;}
   .rc-add-row button{
     flex:0 0 auto;padding:7px 12px;border-radius:6px;border:none;cursor:pointer;
     background:var(--navy-900);color:var(--paper);font-size:13px;
@@ -1001,7 +1009,8 @@
     color:#8a5c14;margin-top:1px;
   }
   .story-row{display:flex;gap:8px;align-items:center;}
-  .story-row input{flex:1 1 auto;min-width:0;}
+  /* mesmo motivo (e mesma necessidade do .field) do .rc-add-row */
+  .field .story-row input{flex:1 1 auto;width:auto;min-width:0;}
   .story-row button{flex:0 0 auto;padding:7px 11px;font-size:12px;border-radius:6px;}
   #iStoryField.off{display:none;}
   .hint-priv.expired{color:var(--coral);}
@@ -1081,9 +1090,9 @@
     .inv-quick{flex-wrap:wrap;}
     .inv-quick input[type=text]{flex:1 1 100%;}
     .rc-add-row{flex-wrap:wrap;}
-    .rc-add-row #rcAmount,.rc-add-row #rcDate{flex:1 1 100%;}
+    .field .rc-add-row #rcAmount,.field .rc-add-row #rcDate{flex:1 1 100%;}
     .story-row{flex-wrap:wrap;}
-    .story-row input,.story-row button{flex:1 1 100%;}
+    .field .story-row input,.story-row button{flex:1 1 100%;}
   }
 </style>
 </head>
