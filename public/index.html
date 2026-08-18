@@ -3092,6 +3092,7 @@ document.getElementById('iSaleStatus').addEventListener('change', syncCondFields
   el.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); el.blur(); } });
 });
 
+document.getElementById('invOpenAdd').addEventListener('click', ()=> openInvModal(null));
 document.getElementById('iCancel').addEventListener('click', ()=> closeInvModal(false));
 document.getElementById('invModalBackdrop').addEventListener('click', (e)=>{
   if(e.target.id === 'invModalBackdrop') closeInvModal(false);
