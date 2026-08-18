@@ -12,7 +12,10 @@ Express bem pequeno.
 - **Front-end:** `public/index.html` — single-file HTML/CSS/JS vanilla, reaproveitado
   quase integralmente do protótipo original.
 - **Back-end:** `server.js` — Express servindo o front estático + uma API mínima
-  (`GET/PUT /api/kv/:key`) que espelha o contrato antigo do `window.storage.get/set`.
+  (`GET/PUT /api/kv/:key`) que espelha o contrato antigo do `window.storage.get/set`,
+  mais `POST/DELETE /api/upload` para as fotos do inventário. O upload recebe os bytes
+  crus da imagem no corpo (o cliente já reduziu no canvas), o que dispensa multipart e
+  qualquer dependência nova.
 - **Persistência:** SQLite (`better-sqlite3`), uma tabela `kv_store` (key/value), sem
   ORM nem schema relacional — troca 1:1 do storage anterior, sem refactor de modelo de
   dados.
@@ -48,7 +51,99 @@ Comentário não enviado fica guardado em memória enquanto a aba estiver aberta
 então qualquer outra ação no painel (que redesenha os cards) não apaga o que
 estava sendo escrito. Rascunho não vai para o banco — só o comentário enviado.
 
+## Inventário
+
+Segunda aba do painel, para a outra metade da mudança: decidir o destino de cada objeto
+da casa e acompanhar quanto a venda já rendeu.
+
+É uma **triagem completa**, não só uma lista de vendas. Todo item tem um **destino** —
+*A decidir*, *Vender*, *Levar*, *Doar* ou *Descartar*. `A decidir` é o padrão de
+propósito: uma triagem começa indecisa, e sem esse estado não dá para medir o que ainda
+falta resolver. Só quem vai à venda ganha o ciclo comercial (preço pedido, piso, status
+do anúncio, comprador, preço realizado); para os demais as colunas de dinheiro ficam
+vazias, nunca em "R$ 0,00", que sugeriria "de graça".
+
+**Trocar o destino nunca apaga nada.** Marcar um sofá como *Doar* por engano depois de
+ter posto R$ 1.200 e voltar para *Vender* recupera tudo — quem decide se o dinheiro
+conta é a exibição e a soma, ambas filtrando por destino. Pelo mesmo motivo "resolvido"
+é derivado, nunca gravado: vendido para quem vende, um checkbox "já saiu de casa" para
+quem doa/leva/descarta.
+
+### Captura rápida
+
+Uma casa inteira são umas 80 coisas. Passar cada uma por um formulário de 15 campos
+garante que a aba não seja usada, então o campo no topo da tabela cadastra com um Enter
+— nome, o cômodo que fica fixo entre um item e outro, e nada mais. Preço, foto e destino
+vêm depois, só nos itens que merecem. Duplicata é permitida: "Cadeira" seis vezes é
+resultado legítimo de varrer uma sala.
+
+### Preço mínimo é privado
+
+Cada item à venda guarda o preço pedido e um **piso de negociação** (🔒). O piso nunca
+entra no texto do anúncio e não aparece na faixa do topo — que é a parte da tela que vai
+num print mandado para alguém. Ele fica só no rodapé da tabela.
+
+O botão 📋 gera o texto do anúncio pronto para colar no Marketplace/OLX, com estado,
+valor, observações e o prazo. Fora de HTTPS (por exemplo, abrindo pelo IP na rede local)
+o navegador não expõe a API de área de transferência; nesse caso o texto aparece já
+selecionado para copiar à mão.
+
+### Os números
+
+A faixa do topo mostra o quadro **global** — itens resolvidos, a receber, recebido e em
+risco. O rodapé da tabela mostra o **filtro atual**: filtrando por `Cômodo = Sala`, ele
+diz quanto a sala vale. Sem filtro os dois coincidem.
+
+"A receber" é a soma do que **ainda está à venda**, não `pedido − recebido`: vender acima
+do preço pedido faria a conta ingênua dizer que sobrou menos do que realmente sobra. E
+`⚠ N sem preço` existe para avisar que o total está subestimado — sem isso ele mentiria
+por omissão.
+
+Preços são guardados em centavos inteiros. O campo aceita `1200`, `1.200`, `1200,50` ou
+`R$ 1.200,50`, e normaliza ao sair do campo: quem digita `1200` vê `1.200,00` antes de
+salvar, que é a confirmação de que foi lido como mil e duzentos.
+
+### Fotos
+
+A foto é enviada do arquivo ou da câmera e reduzida no próprio navegador antes de subir
+(1280px, JPEG) — uma foto de celular sai de vários MB para uns 200 KB, o que torna o
+upload viável no 4G. O reencode ainda descarta o EXIF inteiro, inclusive a
+geolocalização de dentro de casa, e normaliza HEIC de iPhone.
+
+Os arquivos ficam em `/uploads`, **ao lado do banco** — dentro do volume do Railway, e
+não em `public/`, que é reconstruído a cada deploy. Excluir o item ou trocar a foto apaga
+o arquivo antigo, mas só depois de a mudança ter sido efetivamente gravada: se a gravação
+falhar, o registro no banco continua apontando para aquela foto, então ela precisa
+continuar existindo.
+
+### Prazos
+
+O prazo de cada item é lido contra a data da mudança que o painel já guarda, em três
+níveis: `⚠` o prazo estourou, `⏳` o prazo cai **depois** do voo (não vai dar tempo) e
+`·` faltam menos de 30 dias e o item nem prazo tem.
+
+### Edição simultânea
+
+Diferente das demandas, a triagem é os dois andando pela casa com dois celulares ao mesmo
+tempo — e o dado perdido agora é dinheiro. Por isso o inventário lê o estado do servidor
+antes de gravar e funde item a item, em vez de sobrescrever o bloco inteiro: a aba aberta
+de manhã não apaga o que o outro cadastrou à tarde. Edição simultânea do *mesmo* item
+continua sendo o último a salvar que vence.
+
+Um id que existe aqui e não existe no servidor tem duas leituras opostas, e a última
+leitura conhecida separa as duas: se o id não estava nela, é cadastro local que ainda não
+subiu e precisa sobreviver à fusão; se estava, o outro lado excluiu — e ressuscitar
+desfaria a exclusão para os dois, porque a gravação seguinte regravaria o item.
+
+Voltar para a aba também recarrega (sem polling): no celular isso acontece a cada
+desbloqueio, que é o ritmo da triagem. O que estava em digitação nos últimos instantes é
+gravado antes da recarga, não depende de sorte.
+
 ## Ordem manual e drag and drop
+
+Vale para a aba de demandas. A tabela do inventário usa ordenação por coluna: numa lista
+de 80 objetos a pergunta é sempre "o que vale mais" ou "o que vence antes", e não em que
+posição a linha 57 deveria estar.
 
 Cards e itens de checklist são reordenáveis arrastando pela alça ⠿. Cards podem
 mudar de coluna e ir para as filas laterais no arraste; itens de checklist podem
@@ -112,7 +207,9 @@ Abre em `http://localhost:3000`. O banco SQLite é criado em `./data/app.db`
 1. Criar um novo projeto no Railway a partir deste repositório.
 2. Adicionar um **Volume** ao serviço, montado em `/data`.
 3. Definir a variável de ambiente `DATABASE_PATH=/data/app.db` (sem isso o SQLite fica
-   no filesystem efêmero do container e os dados somem a cada deploy).
+   no filesystem efêmero do container e os dados somem a cada deploy). O mesmo volume
+   guarda as fotos do inventário, em `/data/uploads` — o diretório é derivado do
+   `DATABASE_PATH`, então não há nada a configurar além dele.
 4. Deploy — o Railway detecta o `package.json` e roda `npm install && npm start`
    automaticamente.
 
@@ -127,6 +224,6 @@ Conforme o handoff original, esta etapa só migrou o storage (Claude.ai artifact
 - Refactor de categoria por `id` estável (hoje ainda é por nome, como no protótipo)
 - Filtro por "atrasadas" / "prazo esta semana"
 - Edição de comentário já enviado (hoje só dá para excluir e escrever outro)
-- Aviso de comentário novo do outro lado (não há push nem polling — só aparece
-  ao recarregar a página)
+- Aviso de comentário novo do outro lado (não há push nem polling — o inventário
+  recarrega ao voltar para a aba, as demandas só ao recarregar a página)
 - Qualquer autenticação real, caso o link privado deixe de ser suficiente

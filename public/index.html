@@ -719,6 +719,304 @@
   .checklist-editor.drop-active, .checklist.drop-active{
     background:rgba(232,163,61,0.08);
   }
+
+  /* ================== ABAS ================== */
+  /* A troca de aba é só CSS: nada sai do DOM. render() faz getElementById
+     dos nós do board sem checar nulo, então remover a aba escondida
+     derrubaria o painel inteiro num TypeError. */
+  .tabs{display:flex;gap:6px;margin:14px 0 0;border-bottom:1px solid var(--navy-700);}
+  .tab-btn{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;padding:9px 16px;margin-bottom:-1px;cursor:pointer;
+    background:transparent;color:#9aa4bd;
+    border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;
+  }
+  .tab-btn:hover{color:var(--paper);}
+  .tab-btn.active{background:var(--navy-800);border-color:var(--navy-700);color:var(--amber);}
+  .tab-btn .n{color:#6d7794;margin-left:7px;}
+  .tab-btn.active .n{color:var(--amber-dim);}
+  .view{display:none;}
+  .view.active{display:block;}
+  /* "Data prevista" e "Dias restantes" valem para as duas abas — a data da
+     mudança governa os prazos do inventário também. As demais são específicas
+     e trocam junto com a aba. */
+  body[data-view="tasks"] .strip-cell[data-strip="inventory"]{display:none;}
+  body[data-view="inventory"] .strip-cell[data-strip="tasks"]{display:none;}
+  /* A regra .strip-cell:last-child não serve mais: o último filho do DOM pode
+     estar escondido pela aba. A classe é aplicada no JS, em renderStrip(). */
+  .strip-cell.strip-last{border-right:none;}
+
+  /* ================== CAPTURA RÁPIDA ================== */
+  .inv-quick{display:flex;gap:8px;align-items:center;margin:14px 0 10px;}
+  .inv-quick input[type=text]{
+    flex:1 1 auto;font-family:'Inter',sans-serif;font-size:14px;padding:9px 13px;
+    border-radius:9px;border:1px dashed var(--navy-700);
+    background:var(--navy-800);color:var(--paper);
+  }
+  .inv-quick input[type=text]:focus{outline:none;border-color:var(--amber);border-style:solid;}
+  .inv-quick input::placeholder{color:#6d7794;}
+  .inv-quick select{
+    flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:9px 10px;
+    border-radius:9px;border:1px solid var(--navy-700);
+    background:var(--navy-800);color:var(--paper);
+  }
+  .inv-chip{
+    display:flex;align-items:center;gap:7px;padding:6px 11px;border-radius:10px;
+    background:var(--navy-800);border:1px solid var(--navy-700);cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--paper);
+    flex-shrink:0;
+  }
+  .inv-chip:hover{border-color:var(--amber-dim);}
+  .inv-chip.active{border-color:var(--amber);}
+  .inv-chip .n{color:#9aa4bd;}
+  .inv-chip .n b{color:var(--paper);font-weight:600;}
+  .inv-search{
+    flex:1 1 200px;max-width:280px;
+    font-family:'Inter',sans-serif;font-size:13px;padding:7px 12px;
+    border-radius:8px;border:1px solid var(--navy-700);
+    background:var(--navy-800);color:var(--paper);
+  }
+  .inv-search::placeholder{color:#6d7794;}
+
+  /* ================== TABELA ================== */
+  .inv-sheet{
+    background:var(--paper);color:var(--ink);border-radius:14px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.22);overflow:hidden;margin-bottom:18px;
+  }
+  /* Pane com scroll próprio: é o que faz thead sticky no topo e tfoot sticky
+     no rodapé funcionarem ao mesmo tempo. Com a página rolando, o sticky do
+     tfoot não tem contra o que grudar. */
+  .inv-wrap{max-height:calc(100vh - 320px);min-height:240px;overflow:auto;-webkit-overflow-scrolling:touch;}
+  .inv-table{
+    width:100%;min-width:920px;
+    border-collapse:separate;border-spacing:0;  /* collapse mata a borda de célula sticky */
+    table-layout:fixed;                         /* sem isso as colunas dançam ao filtrar */
+    font-size:13px;
+  }
+  .w-exp{width:30px;} .w-photo{width:54px;} .w-name{width:auto;}
+  .w-dest{width:100px;} .w-status{width:108px;} .w-owner{width:48px;}
+  .w-prazo{width:80px;} .w-ask{width:112px;} .w-sold{width:124px;} .w-act{width:96px;}
+
+  .inv-table thead th{
+    position:sticky;top:0;z-index:3;background:var(--paper-dim);
+    font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+    letter-spacing:.1em;text-transform:uppercase;color:#4a5468;
+    text-align:left;padding:9px 8px;white-space:nowrap;
+    border-bottom:2px dashed rgba(0,0,0,0.22);
+  }
+  .inv-table thead th.sortable{cursor:pointer;user-select:none;}
+  .inv-table thead th.sortable:hover{color:var(--ink);}
+  .inv-table thead th .arrow{opacity:.22;margin-left:4px;}
+  .inv-table thead th.sorted{color:var(--ink);}
+  .inv-table thead th.sorted .arrow{opacity:1;color:var(--amber-dim);}
+  .inv-table th.money, .inv-table td.money{text-align:right;}
+
+  .inv-row > td{padding:5px 8px;vertical-align:middle;border-bottom:1px dashed rgba(0,0,0,0.12);}
+  .inv-row > td.c-name{vertical-align:middle;}
+  .inv-row:hover > td{background:rgba(0,0,0,0.035);}
+  /* Faixa de destino na borda esquerda — é o que dá leitura em bloco com 100
+     linhas. Tingir a linha inteira vira ruído. */
+  .inv-row > td:first-child{box-shadow:inset 3px 0 0 var(--dest-color,transparent);}
+  .inv-row.dest-vender{--dest-color:var(--amber);}
+  .inv-row.dest-levar{--dest-color:var(--teal);}
+  .inv-row.dest-doar{--dest-color:#6a5acd;}
+  .inv-row.dest-descartar{--dest-color:#a9a294;}
+  .inv-row.dest-adecidir{--dest-color:#c3bba8;}
+  .inv-row.is-resolved{opacity:.72;}
+  .inv-row.is-resolved .inv-name{text-decoration:line-through;}
+  .inv-empty td{padding:34px 10px;text-align:center;font-style:italic;color:var(--ink-soft);}
+
+  .inv-exp{
+    border:none;background:none;cursor:pointer;color:var(--ink-soft);
+    font-size:13px;line-height:1;padding:2px 3px;transition:transform .12s ease;
+  }
+  .inv-exp.open{transform:rotate(90deg);color:var(--ink);}
+  .inv-thumb{
+    width:34px;height:34px;border-radius:6px;object-fit:cover;display:block;
+    background:var(--paper-dim);cursor:zoom-in;
+  }
+  /* Classe própria, não 'empty': a .empty do painel aplica padding:30px e,
+     com box-sizing:border-box, isso vira o piso da altura da miniatura —
+     e body.is-dragging .empty ainda a esconderia ao arrastar um card. */
+  .inv-thumb.no-photo{
+    display:flex;align-items:center;justify-content:center;
+    font-size:15px;opacity:.35;cursor:default;
+  }
+  .inv-name{display:block;font-weight:600;line-height:1.25;overflow-wrap:anywhere;}
+  .inv-sub{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);margin-top:2px;}
+  .inv-sub .cat-dot{display:inline-block;width:7px;height:7px;margin-right:4px;}
+
+  .dest-badge,.st-badge{
+    display:inline-block;padding:2px 7px;border-radius:5px;
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;
+  }
+  .db-vender{background:rgba(232,163,61,0.20);color:#8a5c14;}
+  .db-levar{background:rgba(62,142,126,0.18);color:#276a5a;}
+  .db-doar{background:rgba(106,90,205,0.16);color:#4b3fa0;}
+  .db-descartar{background:rgba(0,0,0,0.07);color:#6b6558;}
+  .db-adecidir{background:rgba(0,0,0,0.05);color:#8b8474;font-style:italic;}
+  .st-badge{border:none;cursor:pointer;}
+  .st-badge:hover{filter:brightness(.94);}
+  .st-0{background:rgba(0,0,0,0.06);color:#6b6558;}
+  .st-1{background:rgba(62,92,142,0.16);color:#31507f;}
+  .st-2{background:rgba(232,163,61,0.22);color:#8a5c14;}
+  .st-3{background:rgba(106,90,205,0.16);color:#4b3fa0;}
+  .st-4{background:rgba(62,142,126,0.22);color:#276a5a;}
+  .who{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:var(--ink-soft);}
+  .risk-badge{
+    display:inline-block;padding:2px 6px;border-radius:5px;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;white-space:nowrap;
+  }
+  .risk-late{background:rgba(217,99,90,0.25);color:#a83a30;font-weight:600;}
+  .risk-after{background:rgba(232,163,61,0.22);color:#8a5c14;}
+  .risk-none{background:rgba(232,163,61,0.12);color:#9c7430;}
+
+  .money{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .m-ask,.m-sold{display:block;font-size:12.5px;font-weight:600;}
+  .m-min{display:block;font-size:10px;color:var(--ink-soft);margin-top:1px;opacity:.8;}
+  .m-buyer{
+    display:block;font-family:'Inter',sans-serif;font-size:10px;color:var(--ink-soft);
+    margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .na{color:#a9a294;}
+  .inv-row.no-money .na{opacity:.55;}
+  .c-act{white-space:nowrap;text-align:right;}
+  .c-act button{
+    border:none;background:none;color:var(--ink-soft);cursor:pointer;
+    font-size:12px;padding:3px 4px;border-radius:5px;
+  }
+  .c-act button:hover{background:rgba(0,0,0,0.07);color:var(--ink);}
+  .c-act .cm.has{color:#276a5a;font-family:'IBM Plex Mono',monospace;font-size:10px;}
+  .act-gap{color:transparent;padding:0 6px;}
+
+  /* ---- linha de detalhe ---- */
+  .inv-detail > td{
+    background:rgba(0,0,0,0.035);border-bottom:1px dashed rgba(0,0,0,0.12);
+    padding:10px 14px 12px 46px;
+  }
+  .dt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 18px;margin-bottom:9px;}
+  .dt-cell.wide{grid-column:1/-1;}
+  .dt-label{
+    display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;
+    letter-spacing:.1em;text-transform:uppercase;color:#6b6558;margin-bottom:2px;
+  }
+  .dt-value{font-size:12.5px;line-height:1.4;overflow-wrap:anywhere;white-space:pre-wrap;}
+  .dt-value a{color:#31507f;}
+  .dt-thread{border-top:1px dashed rgba(0,0,0,0.12);padding-top:9px;max-width:760px;}
+  .dt-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .dt-actions .add-btn.ghost{
+    border-color:#d8cfb6;color:var(--ink-soft);background:transparent;
+    font-size:12px;padding:5px 10px;
+  }
+  .dt-actions .add-btn.ghost:hover{border-color:var(--amber-dim);color:#8a5c14;}
+  .dt-actions .add-btn.ghost.danger:hover{border-color:var(--coral);color:var(--coral);}
+  .dt-resolve{
+    display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);
+  }
+
+  /* ---- totais ---- */
+/* Fora da <table> de propósito: como irmã do pane que rola, a barra fica
+     sempre visível sem precisar de position:sticky — e um tfoot em display
+     block dentro de uma tabela herda a largura da primeira coluna. */
+  .inv-totals{
+    display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;
+    background:var(--paper-dim);border-top:2px dashed rgba(0,0,0,0.22);
+    padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+  }
+  .inv-totals .t-money{text-align:right;min-width:130px;}
+  .inv-totals .t-money:first-of-type{margin-left:auto;}
+  .inv-totals .t-left{color:var(--ink-soft);flex:1 1 auto;}
+  .inv-totals .t-left b{color:var(--ink);}
+  .inv-totals .t-left .warn{color:#a83a30;}
+  .inv-totals .t-lab{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#6b6558;}
+  .inv-totals .t-val{font-size:14px;font-weight:600;}
+  .inv-totals .t-min{display:block;font-size:10px;color:var(--ink-soft);}
+
+  /* ---- modal do item ---- */
+  .modal.wide{max-width:580px;}
+  .field-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 12px;}
+  .sale-block{
+    border:1px solid #e0d7bd;border-radius:9px;padding:12px 12px 2px;margin:0 0 14px;
+    background:rgba(0,0,0,0.02);
+  }
+  .sale-block > legend{
+    font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.12em;
+    text-transform:uppercase;color:#6b6558;padding:0 6px;
+  }
+  .sale-block.off{display:none;}
+  .hint-priv{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8a5c14;margin-top:3px;}
+  .photo-row{display:flex;align-items:center;gap:12px;}
+  .photo-prev{width:96px;height:96px;border-radius:8px;object-fit:cover;background:var(--paper-dim);flex-shrink:0;}
+  .photo-prev.off{display:none;}
+  .photo-state{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);}
+  .photo-state.error{color:var(--coral);}
+  .photo-btns{display:flex;flex-direction:column;gap:6px;align-items:flex-start;}
+  /* .field input:not([type=checkbox]) é do formulário de texto e esticava o
+     seletor de arquivo com o padding de um input. */
+  .photo-btns input[type=file]{width:auto;padding:0;border:none;background:none;font-size:12px;}
+
+  /* ---- toast ---- */
+  .inv-toast{
+    position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+    background:var(--navy-800);color:var(--paper);border:1px solid var(--navy-700);
+    border-radius:10px;padding:10px 16px;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    box-shadow:0 10px 26px rgba(0,0,0,0.4);z-index:120;
+    opacity:0;pointer-events:none;transition:opacity .18s ease;
+  }
+  .inv-toast.show{opacity:1;}
+  #photoBackdrop .modal{background:none;padding:0;max-width:min(92vw,900px);}
+  #photoBackdrop img{width:100%;height:auto;border-radius:12px;display:block;}
+  #adText{
+    width:100%;min-height:200px;padding:10px;border-radius:8px;border:1px solid #d8cfb6;
+    font-family:'Inter',sans-serif;font-size:13px;line-height:1.5;background:#fff;color:var(--ink);
+    resize:vertical;
+  }
+  .sm-only{display:none;}
+
+  @media (max-width:820px){
+    /* Nada de scroll horizontal: 6 das 10 colunas somem e o que elas diziam
+       reaparece como badges dentro da célula do nome. overflow-x no wrapper
+       quebraria o sticky do thead, que passaria a grudar no topo do container. */
+    /* Só esconder os <td> não basta: com table-layout:fixed os <col> continuam
+       reservando a largura deles, a coluna do nome fica com alguns pixels e o
+       texto quebra letra a letra — além de empurrar a página inteira para fora
+       da viewport. No celular a tabela volta a ser auto e as colunas mortas
+       zeram. */
+    .inv-table{min-width:0;font-size:12.5px;table-layout:auto;}
+    /* width:0 num <col> é ignorado pelo Chrome — a coluna segue reservando
+       espaço mesmo com todas as células em display:none. display:none no
+       próprio <col> é o que realmente a remove. */
+    .w-dest,.w-status,.w-owner,.w-prazo,.w-sold,.w-act{display:none;}
+    .w-name{width:auto;}
+    .w-exp{width:26px;} .w-photo{width:46px;} .w-ask{width:92px;}
+    .inv-wrap{max-height:none;overflow:visible;}
+    .inv-table thead th{font-size:9px;padding:7px 6px;}
+    .c-dest,.c-status,.c-owner,.c-prazo,.c-sold,
+    .inv-table thead th:nth-child(4),.inv-table thead th:nth-child(5),
+    .inv-table thead th:nth-child(6),.inv-table thead th:nth-child(7),
+    .inv-table thead th:nth-child(9),.c-act,
+    .inv-table thead th:nth-child(10){display:none;}
+    .inv-row > td{padding:8px 6px;}
+    .inv-thumb{width:36px;height:36px;}
+    .sm-only{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;}
+    .inv-detail > td{padding:10px 12px;}
+    .dt-grid{grid-template-columns:1fr;}
+    .dt-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+    .inv-totals{flex-direction:column;align-items:stretch;gap:8px;padding:10px 12px;}
+    .inv-totals .t-money{text-align:left;margin-left:0;}
+    .inv-totals .t-money:first-of-type{margin-left:0;}
+    .inv-totals .t-lab{display:inline;margin-right:6px;}
+    .inv-totals .t-val{font-size:13px;}
+    /* mesma faixa rolável dos chips de categoria */
+    .inv-chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
+    .inv-search{max-width:none;flex:1 1 100%;}
+    .tab-btn{flex:1;text-align:center;padding:8px 6px;}
+    .inv-quick{flex-wrap:wrap;}
+    .inv-quick input[type=text]{flex:1 1 100%;}
+  }
 </style>
 </head>
 <body>
@@ -737,18 +1035,40 @@
       <div class="strip-label">Dias restantes</div>
       <div class="strip-value amber" id="daysLeft">—</div>
     </div>
-    <div class="strip-cell">
+    <div class="strip-cell" data-strip="tasks">
       <div class="strip-label">Concluídas</div>
       <div class="strip-value teal" id="doneCount">0 / 0</div>
     </div>
-    <div class="strip-cell">
+    <div class="strip-cell" data-strip="tasks">
       <div class="strip-label">Atrasadas</div>
       <div class="strip-value coral" id="overdueCount">0</div>
+    </div>
+    <div class="strip-cell" data-strip="inventory">
+      <div class="strip-label">Itens</div>
+      <div class="strip-value teal" id="invResolvedCount">0 / 0</div>
+    </div>
+    <div class="strip-cell" data-strip="inventory">
+      <div class="strip-label">A receber</div>
+      <div class="strip-value amber" id="invOpenTotal">—</div>
+    </div>
+    <div class="strip-cell" data-strip="inventory">
+      <div class="strip-label">Recebido</div>
+      <div class="strip-value teal" id="invRecvTotal">—</div>
+    </div>
+    <div class="strip-cell" data-strip="inventory">
+      <div class="strip-label">Em risco</div>
+      <div class="strip-value coral" id="invRiskCount">0</div>
     </div>
   </div>
 </header>
 
 <main>
+  <nav class="tabs" id="tabBar" role="tablist">
+    <button class="tab-btn active" type="button" role="tab" data-view="tasks" aria-selected="true">📋 Demandas</button>
+    <button class="tab-btn" type="button" role="tab" data-view="inventory" aria-selected="false">📦 Inventário<span class="n" id="tabInvCount"></span></button>
+  </nav>
+
+  <section class="view" id="viewTasks" data-view="tasks">
   <div class="cat-summary" id="catSummary"></div>
 
   <div class="toolbar">
@@ -795,6 +1115,70 @@
   </div>
 
   <p class="status-note" id="statusNote">Carregando painel…</p>
+  </section>
+
+  <section class="view" id="viewInv" data-view="inventory">
+    <div class="inv-quick">
+      <input type="text" id="invQuickName" placeholder="+ Nome do item — Enter cadastra e continua…" autocomplete="off">
+      <select id="invQuickRoom" title="Cômodo — fica fixo entre um cadastro e outro"></select>
+    </div>
+
+    <div class="cat-summary inv-chips" id="invChips"></div>
+
+    <div class="toolbar">
+      <input type="text" class="inv-search" id="invSearch" placeholder="🔍 buscar item…" autocomplete="off">
+      <select id="invFilterCategory"><option value="">Todas as categorias</option></select>
+      <select id="invFilterRoom"><option value="">Todos os cômodos</option></select>
+      <select id="invFilterOwner">
+        <option value="">Ambos + individuais</option>
+        <option>Hugo</option>
+        <option>Taís</option>
+        <option>Ambos</option>
+      </select>
+      <button class="add-btn ghost" id="invClearFilters">↺ Limpar</button>
+      <button class="add-btn ghost" id="invOpenManageCats">⚙ Categorias</button>
+      <button class="add-btn" id="invOpenAdd">+ Novo item</button>
+    </div>
+
+    <div class="inv-sheet">
+      <div class="inv-wrap">
+        <table class="inv-table">
+          <colgroup>
+            <col class="w-exp"><col class="w-photo"><col class="w-name"><col class="w-dest">
+            <col class="w-status"><col class="w-owner"><col class="w-prazo"><col class="w-ask">
+            <col class="w-sold"><col class="w-act">
+          </colgroup>
+          <thead id="invHead">
+            <tr>
+              <th></th>
+              <th>Foto</th>
+              <th class="sortable" data-sort="title">Item<span class="arrow">⇅</span></th>
+              <th class="sortable" data-sort="destination">Destino<span class="arrow">⇅</span></th>
+              <th class="sortable" data-sort="saleStatus">Status<span class="arrow">⇅</span></th>
+              <th class="sortable" data-sort="owner">Resp<span class="arrow">⇅</span></th>
+              <th class="sortable" data-sort="deadline">Prazo<span class="arrow">⇅</span></th>
+              <th class="sortable money" data-sort="askPrice">Pedido<span class="arrow">⇅</span></th>
+              <th class="sortable money" data-sort="soldPrice">Vendido<span class="arrow">⇅</span></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="invBody"></tbody>
+        </table>
+      </div>
+      <div class="inv-totals">
+        <div class="t-left" id="invFootLeft"></div>
+        <div class="t-money">
+          <span class="t-lab">Pedido (filtro)</span>
+          <span class="t-val" id="invFootAsk">—</span>
+          <span class="t-min" id="invFootFloor"></span>
+        </div>
+        <div class="t-money">
+          <span class="t-lab">Recebido (filtro)</span>
+          <span class="t-val" id="invFootRecv">—</span>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <div class="modal-backdrop" id="modalBackdrop">
@@ -867,7 +1251,7 @@
     <h2>Gerenciar categorias</h2>
     <div id="manageCatList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
     <p style="font-size:11px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;margin:0 0 16px;">
-      Renomear atualiza as tarefas existentes. Excluir move as tarefas dessa categoria para "Sem categoria".
+      Renomear atualiza os registros existentes. Excluir move os dessa categoria para "Sem categoria".
     </p>
     <div class="modal-actions">
       <button class="btn-primary" id="closeManageCatModal" style="flex:1;">Concluído</button>
@@ -889,6 +1273,148 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="invModalBackdrop">
+  <div class="modal wide">
+    <h2 id="invModalTitle">Novo item</h2>
+
+    <div class="field">
+      <label>Nome</label>
+      <input type="text" id="iTitle" placeholder="Ex: Sofá de 3 lugares">
+    </div>
+
+    <div class="field">
+      <label>Foto</label>
+      <div class="photo-row">
+        <img class="photo-prev off" id="iPhotoPrev" alt="">
+        <div class="photo-btns">
+          <input type="file" id="iPhotoFile" accept="image/*">
+          <button type="button" class="btn-secondary" id="iPhotoRemove" style="padding:5px 10px;font-size:12px;">Remover foto</button>
+          <span class="photo-state" id="iPhotoState"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Categoria</label>
+        <div class="cat-row">
+          <select id="iCategory"></select>
+          <button type="button" id="iAddCategory" title="Nova categoria">+</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Cômodo</label>
+        <input type="text" id="iRoom" list="roomOptions" placeholder="Ex: Sala">
+        <datalist id="roomOptions"></datalist>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Estado</label>
+        <select id="iCondition">
+          <option>Novo</option><option>Ótimo</option><option>Bom</option><option>Usado</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Responsável</label>
+        <select id="iOwner"><option>Ambos</option><option>Hugo</option><option>Taís</option></select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Destino</label>
+        <select id="iDestination"></select>
+      </div>
+      <div class="field">
+        <label>Prazo (opcional)</label>
+        <input type="date" id="iDeadline">
+      </div>
+    </div>
+
+    <fieldset class="sale-block" id="iSaleBlock">
+      <legend>Venda</legend>
+      <div class="field">
+        <label>Status</label>
+        <select id="iSaleStatus"></select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Preço pedido</label>
+          <input type="text" id="iAsk" inputmode="decimal" placeholder="1.200,00">
+        </div>
+        <div class="field">
+          <label>Preço mínimo</label>
+          <input type="text" id="iMin" inputmode="decimal" placeholder="900,00">
+          <span class="hint-priv">🔒 Combinado nosso — nunca vai para o anúncio</span>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Onde anunciou</label>
+          <input type="text" id="iChannel" list="channelOptions" placeholder="Ex: Marketplace">
+          <datalist id="channelOptions">
+            <option>Facebook Marketplace</option><option>OLX</option>
+            <option>Enjoei</option><option>Grupo do prédio</option><option>WhatsApp</option>
+          </datalist>
+        </div>
+        <div class="field">
+          <label>Link do anúncio</label>
+          <input type="text" id="iListingUrl" placeholder="https://…">
+        </div>
+      </div>
+      <fieldset class="sale-block" id="iCloseBlock">
+        <legend>Fechamento</legend>
+        <div class="field-row">
+          <div class="field">
+            <label>Preço vendido</label>
+            <input type="text" id="iSold" inputmode="decimal" placeholder="1.150,00">
+          </div>
+          <div class="field">
+            <label>Comprador</label>
+            <input type="text" id="iBuyer" placeholder="Nome / contato">
+          </div>
+        </div>
+        <div class="field">
+          <label>Data da venda</label>
+          <input type="date" id="iSaleDate">
+        </div>
+      </fieldset>
+    </fieldset>
+
+    <div class="field">
+      <label>Observações</label>
+      <input type="text" id="iNotes" placeholder="Ex: não passa pela porta da cozinha">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="iCancel">Cancelar</button>
+      <button class="btn-primary" id="iSave">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="adBackdrop">
+  <div class="modal" style="max-width:520px;">
+    <h2>Texto do anúncio</h2>
+    <p style="font-size:11px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;margin:0 0 12px;">
+      Dá para ajustar antes de copiar. O preço mínimo nunca entra aqui.
+    </p>
+    <textarea id="adText" spellcheck="true"></textarea>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="adClose">Fechar</button>
+      <button class="btn-primary" id="adCopy">Copiar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="photoBackdrop">
+  <div class="modal"><img id="photoBig" alt=""></div>
+</div>
+
+<div class="inv-toast" id="toast" role="status" aria-live="polite"></div>
+
 <script>
 const STORAGE_KEY = 'toronto-tracker-tasks';
 const DATE_KEY = 'toronto-tracker-movedate';
@@ -896,8 +1422,30 @@ const CATS_KEY = 'toronto-tracker-categories';
 const DEFAULT_CATEGORIES = ['Imigração','Profissional','Financeiro','Pessoal','Família','Saúde'];
 const CAT_PALETTE = ['#3e5c8e','#5b7553','#a3762f','#8c5a8c','#b0554a','#3e8e7e','#6a5acd','#c2703d','#4a7a9c','#8e6b3e'];
 
+const INV_KEY = 'toronto-tracker-inventory';
+const INV_CATS_KEY = 'toronto-tracker-inv-categories';
+const DEFAULT_INV_CATEGORIES = ['Móveis','Eletrodomésticos','Eletrônicos','Cozinha','Decoração','Roupas','Ferramentas','Outros'];
+const DEFAULT_ROOMS = ['Sala','Cozinha','Quarto','Quarto 2','Banheiro','Área de serviço','Escritório','Garagem','Varanda'];
+
+// Destino é a decisão da triagem; saleStatus é o ciclo comercial de quem vai
+// à venda. 'A decidir' é um valor de verdade, não null: uma triagem começa
+// indecisa, e sem isso não dá para medir o que falta decidir.
+const DESTINATIONS = [
+  { id:'A decidir', cls:'adecidir' },
+  { id:'Vender',    cls:'vender' },
+  { id:'Levar',     cls:'levar' },
+  { id:'Doar',      cls:'doar' },
+  { id:'Descartar', cls:'descartar' },
+];
+const SALE_STAGES = ['Não anunciado','Anunciado','Negociando','Reservado','Vendido'];
+const CONDITIONS = ['Novo','Ótimo','Bom','Usado'];
+const INV_UNCATEGORIZED = 'Sem categoria';
+
 let tasks = [];
 let categories = [...DEFAULT_CATEGORIES];
+let invItems = [];
+let invCategories = [...DEFAULT_INV_CATEGORIES];
+let editingInvId = null;
 let editingId = null;
 let editingChecklist = [];
 
@@ -934,20 +1482,200 @@ async function loadAll(){
     tasks = res && res.value ? JSON.parse(res.value) : [];
   }catch(e){ tasks = []; }
 
+  tasksLoaded = true;
   if(seedOrders()) await saveTasks();
 
   populateCategorySelects();
   render();
 }
 
+let tasksSaveFailed = false;
+let tasksLoaded = false;
+
 async function saveTasks(){
-  try{ await kvSet(STORAGE_KEY, JSON.stringify(tasks)); }
-  catch(e){ console.error('Erro ao salvar tarefas', e); }
+  try{
+    await kvSet(STORAGE_KEY, JSON.stringify(tasks));
+    if(tasksSaveFailed){ tasksSaveFailed = false; render(); }
+  }catch(e){
+    // Falhar em silêncio é o pior caso: a tarefa aparece salva na tela e não
+    // está no banco. O aviso vive no #statusNote, reposto a cada render().
+    console.error('Erro ao salvar tarefas', e);
+    tasksSaveFailed = true;
+    const el = document.getElementById('statusNote');
+    if(el) el.textContent = '⚠ Não deu para salvar — verifique a conexão antes de continuar';
+  }
 }
 
 async function saveCategories(){
   try{ await kvSet(CATS_KEY, JSON.stringify(categories)); }
   catch(e){ console.error('Erro ao salvar categorias', e); }
+}
+
+// ---- Inventário: carga, normalização e gravação ----
+
+function newInvId(){ return 'inv-' + Date.now() + Math.random().toString(36).slice(2,5); }
+
+// Migração de esquema para um blob KV: em vez de ALTER TABLE, todo item passa
+// por aqui na leitura. Campo novo = uma linha a mais, e tudo que já foi
+// gravado continua válido sem passo de migração nenhum.
+function normalizeItem(raw){
+  raw = raw || {};
+  return {
+    id: raw.id || newInvId(),
+    title: raw.title || '',
+    category: raw.category || INV_UNCATEGORIZED,
+    room: raw.room || '',
+    condition: CONDITIONS.includes(raw.condition) ? raw.condition : 'Bom',
+    owner: ['Hugo','Taís','Ambos'].includes(raw.owner) ? raw.owner : 'Ambos',
+    destination: DESTINATIONS.some(d=>d.id===raw.destination) ? raw.destination : 'A decidir',
+    deadline: isISODate(raw.deadline) ? raw.deadline : null,
+    notes: raw.notes || '',
+    photo: typeof raw.photo === 'string' && raw.photo ? raw.photo : null,
+    saleStatus: SALE_STAGES.includes(raw.saleStatus) ? raw.saleStatus : 'Não anunciado',
+    askPrice: toCents(raw.askPrice),
+    minPrice: toCents(raw.minPrice),
+    soldPrice: toCents(raw.soldPrice),
+    buyer: raw.buyer || '',
+    channel: raw.channel || '',
+    listingUrl: raw.listingUrl || '',
+    saleDate: raw.saleDate || null,
+    resolvedAt: raw.resolvedAt || null,
+    order: typeof raw.order === 'number' ? raw.order : 0,
+    comments: Array.isArray(raw.comments) ? raw.comments : [],
+    lastEditedBy: raw.lastEditedBy || '',
+    lastEditedAt: raw.lastEditedAt || '',
+  };
+}
+
+// deadline vai para dentro de innerHTML via fmtDate(); validar aqui fecha o
+// caminho de um blob com data forjada injetar markup.
+function isISODate(v){
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+function toCents(v){
+  if(v == null || v === '') return null;
+  const n = typeof v === 'string' ? parseMoney(v) : Math.round(v);
+  return typeof n === 'number' && isFinite(n) ? n : null;
+}
+
+function nextInvOrder(){
+  return invItems.reduce((max, it)=> Math.max(max, it.order || 0), 0) + 1;
+}
+
+let invBaseline = '';
+
+async function loadInventory(opts){
+  const silent = opts && opts.silent;
+  try{
+    const res = await kvGet(INV_CATS_KEY);
+    invCategories = res && res.value ? JSON.parse(res.value) : [...DEFAULT_INV_CATEGORIES];
+  }catch(e){ invCategories = [...DEFAULT_INV_CATEGORIES]; }
+
+  try{
+    const res = await kvGet(INV_KEY);
+    const rawStr = (res && res.value) || '[]';
+    const remote = JSON.parse(rawStr).map(normalizeItem);
+    // Na recarga silenciosa (volta para a aba) substituir a lista apagaria o
+    // que ainda não foi gravado — um item recém-cadastrado cuja gravação está
+    // em debounce, ou uma gravação em vôo. Aqui funde, como no save.
+    invItems = silent ? mergeInventory(remote, invItems) : remote;
+    invBaseline = rawStr;
+  }catch(e){
+    console.error('Erro ao carregar inventário', e);
+    // Sem isso a tela diz "nenhum item" — alarmante e falso numa conexão ruim.
+    setInvNote('⚠ Não deu para carregar o inventário — recarregue a página');
+    if(!silent){ invItems = []; invBaseline = ''; }
+    return;
+  }
+
+  setInvNote('');   // uma carga bem-sucedida limpa um aviso anterior
+  populateInvSelects();
+  // A faixa/contador da aba aparecem nas duas views, então precisam ser
+  // atualizados mesmo quando a tabela do inventário está escondida.
+  if(!silent || activeView === 'inventory') render();
+  else renderStrip();
+}
+
+// Ler antes de escrever, e fundir por item. Uma triagem é duas pessoas
+// andando pela casa com dois celulares: sem isso, a aba aberta de manhã
+// sobrescreve tudo que o outro cadastrou à tarde — e agora o dado é dinheiro.
+async function saveInventory(){
+  try{
+    const remote = await kvGet(INV_KEY);
+    const remoteStr = (remote && remote.value) || '[]';
+    if(remoteStr !== invBaseline){
+      invItems = mergeInventory(JSON.parse(remoteStr).map(normalizeItem), invItems);
+    }
+    const payload = JSON.stringify(invItems);
+    await kvSet(INV_KEY, payload);
+    invBaseline = payload;
+    setInvNote('');
+    return true;
+  }catch(e){
+    console.error('Erro ao salvar inventário', e);
+    setInvNote('⚠ Não deu para salvar — verifique a conexão e recarregue a página');
+    return false;
+  }
+}
+
+// Vence o lastEditedAt mais novo. Não resolve edição simultânea do MESMO item
+// (aí é last-write-wins mesmo, e tudo bem), mas impede a perda em massa.
+//
+// Um id ausente no servidor tem duas leituras opostas, e o baseline as separa:
+// se ele NÃO estava na última leitura, é cadastro local ainda não gravado e
+// precisa sobreviver; se estava, o outro lado excluiu — e ressuscitar aqui
+// desfaria a exclusão para os dois, porque a próxima gravação regrava o item.
+function mergeInventory(remote, local){
+  const seen = baselineIds();
+  const out = new Map(remote.map(it => [it.id, it]));
+  local.forEach(it => {
+    const r = out.get(it.id);
+    if(!r){
+      if(seen.has(it.id)) return;      // excluído do outro lado: respeita
+      out.set(it.id, it);              // novo aqui: preserva
+      return;
+    }
+    if((it.lastEditedAt || '') >= (r.lastEditedAt || '')) out.set(it.id, it);
+  });
+  return [...out.values()];
+}
+
+function baselineIds(){
+  try{ return new Set(JSON.parse(invBaseline || '[]').map(i => i.id)); }
+  catch(e){ return new Set(); }
+}
+
+async function saveInvCategories(){
+  try{ await kvSet(INV_CATS_KEY, JSON.stringify(invCategories)); }
+  catch(e){ console.error('Erro ao salvar categorias do inventário', e); }
+}
+
+// Salvar a cada Enter da captura rápida viraria uma rajada de requisições.
+let invSaveTimer = null;
+function saveInventorySoon(){
+  clearTimeout(invSaveTimer);
+  invSaveTimer = setTimeout(()=>{ invSaveTimer = null; saveInventory(); }, 800);
+}
+
+// Antecipa uma gravação pendente. Chamado antes de qualquer recarga, para o que
+// foi digitado nos últimos 800 ms não depender do acaso.
+async function flushInventorySave(){
+  if(!invSaveTimer) return;
+  clearTimeout(invSaveTimer);
+  invSaveTimer = null;
+  await saveInventory();
+}
+
+let invSaveFailed = false;
+
+function setInvNote(msg){
+  const was = invSaveFailed;
+  invSaveFailed = !!msg;
+  const el = document.getElementById('invFootLeft');
+  if(!el) return;
+  if(msg) el.innerHTML = `<span class="warn">${escapeHtml(msg)}</span>`;
+  else if(was) render();   // repõe os totais no lugar do aviso
 }
 
 async function loadMoveDate(){
@@ -956,11 +1684,15 @@ async function loadMoveDate(){
     if(res && res.value){ document.getElementById('moveDateInput').value = res.value; }
   }catch(e){}
   updateCountdown();
+  render();   // primeiro cálculo de risco já com a data carregada
 }
 
 async function saveMoveDate(val){
   try{ await kvSet(DATE_KEY, val); }catch(e){}
   updateCountdown();
+  // itemRisk() lê a data da mudança ao vivo: sem redesenhar, os badges de
+  // risco e os contadores do inventário ficam com o valor antigo.
+  render();
 }
 
 // ---- "Quem está usando?" — identidade leve por navegador (sem login) ----
@@ -1023,6 +1755,125 @@ function escapeHtml(str){
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// escapeHtml() serializa um nó de texto, e serialização de text node só escapa
+// & < > — aspas passam intactas. Dentro de um atributo isso permite quebrar a
+// tag, então todo atributo interpolado usa esta função, não aquela.
+function escapeAttr(str){
+  return String(str == null ? '' : str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ================= Dinheiro =================
+// Guardado sempre como inteiro de centavos, nunca float: o rodapé soma dezenas
+// de valores a cada redesenho, e um "R$ 12.399,99" por drift de ponto flutuante
+// num painel financeiro compartilhado destrói a confiança na tela toda.
+// null = não informado, que é diferente de zero ("de graça").
+
+function fmtMoneyPlain(cents){
+  const v = Math.round(Number(cents) || 0) / 100;
+  return v.toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+}
+function fmtMoney(cents){
+  return cents == null ? '—' : 'R$ ' + fmtMoneyPlain(cents);
+}
+function fmtMoneyShort(cents){
+  if(cents == null) return '—';
+  const exact = (cents % 100) === 0;
+  const v = Math.round(Number(cents) || 0) / 100;
+  return 'R$ ' + v.toLocaleString('pt-BR', {
+    minimumFractionDigits: exact ? 0 : 2,
+    maximumFractionDigits: exact ? 0 : 2,
+  });
+}
+function moneyToInput(cents){ return cents == null ? '' : fmtMoneyPlain(cents); }
+
+// Aceita "1200", "1.200", "1200,50", "R$ 1.200,50", "1200.50", "1,200.50".
+// Com vírgula e ponto juntos, o que vem por último é o decimal. Ponto sozinho
+// seguido de exatamente 3 dígitos é milhar ("1.200" = mil e duzentos);
+// qualquer outro caso é decimal ("1.5" = 1,50). Devolve centavos ou null.
+function parseMoney(raw){
+  if(raw == null) return null;
+  let s = String(raw).trim();
+  if(!s) return null;
+  s = s.replace(/[^\d.,]/g, '');   // o "-" cai aqui: preço negativo não existe
+  if(!s) return null;
+  const lastC = s.lastIndexOf(','), lastD = s.lastIndexOf('.');
+  let cut;
+  if(lastC >= 0 && lastD >= 0) cut = Math.max(lastC, lastD);
+  else if(lastC >= 0)          cut = lastC;
+  else if(lastD >= 0){
+    const dots = (s.match(/\./g) || []).length;
+    cut = (dots > 1 || s.length - lastD - 1 === 3) ? -1 : lastD;
+  } else cut = -1;
+  const intPart  = (cut >= 0 ? s.slice(0, cut)  : s ).replace(/[.,]/g, '');
+  const fracPart = (cut >= 0 ? s.slice(cut + 1) : '').replace(/[.,]/g, '');
+  if(!intPart && !fracPart) return null;
+  const cents = Number(intPart || '0') * 100 + Number((fracPart + '00').slice(0, 2));
+  if(!Number.isFinite(cents) || cents > 1e11) return null;
+  return cents;
+}
+
+// ================= Estado do item =================
+
+// Derivado, nunca gravado: um booleano `resolved` precisaria ser mantido em
+// sincronia com saleStatus em três lugares, e é exatamente isso que sai de
+// sincronia quando duas pessoas editam.
+function isResolved(it){
+  if(it.destination === 'A decidir') return false;
+  if(it.destination === 'Vender')    return it.saleStatus === 'Vendido';
+  return !!it.resolvedAt;
+}
+
+function todayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function moveDateValue(){
+  const el = document.getElementById('moveDateInput');
+  return (el && el.value) || '';
+}
+function daysBetween(a, b){
+  return Math.ceil((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+
+// isOverdue() é de tarefa (fixa status === 'Concluído'). Aqui "resolvido" é
+// vendido/doado/descartado, e o prazo também é lido contra a data da mudança:
+// item que só vence depois do voo não vai dar tempo.
+function itemRisk(it){
+  if(isResolved(it)) return null;
+  const today = todayISO(), move = moveDateValue();
+  if(it.deadline && it.deadline < today) return 'late';
+  if(move){
+    if(it.deadline && it.deadline > move) return 'after';
+    if(!it.deadline && daysBetween(today, move) <= 30) return 'none';
+  }
+  return null;
+}
+
+function invTotals(list){
+  const sum = (arr, k) => arr.reduce((a, i) => a + (i[k] || 0), 0);
+  const forSale = list.filter(i => i.destination === 'Vender');
+  const sold    = forSale.filter(i => i.saleStatus === 'Vendido');
+  const open    = forSale.filter(i => i.saleStatus !== 'Vendido');
+  return {
+    count: list.length,
+    forSale: forSale.length,
+    sold: sold.length,
+    resolved: list.filter(isResolved).length,
+    // Pedido "em aberto": o já-vendido sai daqui e entra em `received`, senão
+    // o mesmo dinheiro é contado duas vezes.
+    asked: sum(open, 'askPrice'),
+    // Cenário pessimista, sobre os mesmos itens que compõem `asked`: sem preço
+    // pedido o item conta como "sem preço", e exibir um piso para ele deixaria
+    // o rodapé se contradizendo ("Pedido —" com um piso embaixo).
+    floor: open.reduce((a,i)=> a + (i.askPrice == null ? 0 : (i.minPrice != null ? i.minPrice : i.askPrice)), 0),
+    received: sum(sold, 'soldPrice'),
+    unpriced: open.filter(i => i.askPrice == null).length,
+    atRisk: list.filter(i => itemRisk(i)).length,
+  };
 }
 
 function populateCategorySelects(){
@@ -1135,7 +1986,7 @@ function buildCard(t){
       <p class="card-title">${escapeHtml(t.title)}</p>
       <div class="card-meta">
         <span class="badge prio-${t.priority}">${t.priority}</span>
-        ${t.deadline ? `<span class="badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠ ' : ''}${fmtDate(t.deadline)}</span>` : ''}
+        ${t.deadline ? `<span class="badge ${overdue ? 'overdue' : ''}">${overdue ? '⚠ ' : ''}${escapeHtml(fmtDate(t.deadline))}</span>` : ''}
         ${checklist.length ? `<span class="badge checklist-badge" data-action="toggle-checklist" data-id="${t.id}">☑ ${clDone}/${checklist.length}</span>` : ''}
         <span class="badge comment-badge${comments.length ? ' has' : ''}" data-action="toggle-comments" data-id="${t.id}" title="Comentários">💬${comments.length ? ' ' + comments.length : ''}</span>
         ${t.queue ? `<span class="badge">${escapeHtml(t.status)}</span>` : ''}
@@ -1196,7 +2047,7 @@ function visibleTasks(){
   );
 }
 
-function render(){
+function renderTasks(){
   // category summary chips
   const summaryEl = document.getElementById('catSummary');
   summaryEl.innerHTML = '';
@@ -1230,15 +2081,81 @@ function render(){
   });
 
   const total = tasks.length;
-  const done = tasks.filter(t=>t.status==='Concluído').length;
-  document.getElementById('doneCount').textContent = `${done} / ${total}`;
-  document.getElementById('overdueCount').textContent = tasks.filter(isOverdue).length;
 
   document.getElementById('statusNote').textContent =
-    total === 0 ? 'Nenhuma demanda cadastrada ainda — adicione a primeira acima.' : '';
+    tasksSaveFailed ? '⚠ Não deu para salvar — verifique a conexão antes de continuar'
+    : !tasksLoaded ? 'Carregando painel…'
+    : total === 0 ? 'Nenhuma demanda cadastrada ainda — adicione a primeira acima.' : '';
 
   updateChecklistToggle();
 }
+
+// ---- Abas ----
+// render() continua significando "redesenhe o painel" para os ~15 pontos que
+// já chamavam ele; agora só desenha a aba visível. As duas views ficam sempre
+// no DOM (escondidas por CSS), porque renderTasks() busca os nós do board sem
+// checar nulo — removê-los derrubaria o painel inteiro.
+const VIEWS = ['tasks','inventory'];
+let activeView = 'tasks';
+
+function render(){
+  if(activeView === 'inventory') renderInventory();
+  else renderTasks();
+  renderStrip();
+}
+
+function renderStrip(){
+  if(activeView === 'tasks'){
+    const done = tasks.filter(t=>t.status==='Concluído').length;
+    document.getElementById('doneCount').textContent = `${done} / ${tasks.length}`;
+    document.getElementById('overdueCount').textContent = tasks.filter(isOverdue).length;
+  } else {
+    const t = invTotals(invItems);
+    document.getElementById('invResolvedCount').textContent = `${t.resolved} / ${invItems.length}`;
+    document.getElementById('invOpenTotal').textContent = fmtMoneyShort(t.asked);
+    document.getElementById('invRecvTotal').textContent = fmtMoneyShort(t.received);
+    document.getElementById('invRiskCount').textContent = t.atRisk;
+  }
+  // .strip-cell:last-child não serve: o último filho do DOM pode estar
+  // escondido pela aba, e aí sobra uma divisória à direita.
+  const cells = [...document.querySelectorAll('.boarding-strip .strip-cell')]
+    .filter(c => !c.dataset.strip || c.dataset.strip === activeView);
+  document.querySelectorAll('.boarding-strip .strip-cell')
+    .forEach(c => c.classList.remove('strip-last'));
+  if(cells.length) cells[cells.length - 1].classList.add('strip-last');
+
+  const tabN = document.getElementById('tabInvCount');
+  if(tabN) tabN.textContent = invItems.length ? invItems.length : '';
+}
+
+function setView(view){
+  activeView = VIEWS.includes(view) ? view : 'tasks';
+  document.querySelectorAll('.view').forEach(el =>
+    el.classList.toggle('active', el.dataset.view === activeView));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    const on = b.dataset.view === activeView;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.body.dataset.view = activeView;   // o CSS troca as células da faixa
+  render();
+}
+
+// A aba mora no hash: sobrevive ao reload e dá para mandar o link direto
+// ("olha o inventário: <url>#inventario"), sem gastar uma chave de storage —
+// estado de visualização aqui nunca é persistido.
+function viewFromHash(){
+  return location.hash.slice(1) === 'inventario' ? 'inventory' : 'tasks';
+}
+
+document.getElementById('tabBar').addEventListener('click', (e)=>{
+  const tab = e.target.closest('.tab-btn');
+  if(!tab || tab.dataset.view === activeView) return;
+  // replaceState: alternar aba não deve encher o histórico do navegador.
+  history.replaceState(null, '', tab.dataset.view === 'inventory' ? '#inventario' : location.pathname);
+  setView(tab.dataset.view);
+});
+window.addEventListener('hashchange', ()=> setView(viewFromHash()));
 
 // ---- Expandir / recolher todos os checklists ----
 // Age sobre as tarefas visíveis: com um filtro ativo, o botão fala sobre o
@@ -1249,6 +2166,7 @@ function checklistTasks(){
 
 function updateChecklistToggle(){
   const btn = document.getElementById('toggleAllChecklists');
+  if(!btn) return;
   const list = checklistTasks();
   const allOpen = list.length > 0 && list.every(t => openPanels.has('cl-' + t.id));
   btn.disabled = list.length === 0;
@@ -1376,7 +2294,9 @@ document.addEventListener('keydown', (e)=>{
   if(e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
   if(!e.target.matches('.comment-add textarea')) return;
   e.preventDefault();
-  const send = document.querySelector(`button[data-action="add-comment"][data-id="${e.target.dataset.id}"]`);
+  // Casa 'add-comment' e 'inv-add-comment': o botão certo é o do próprio
+  // bloco em que se está digitando, então nem precisa procurar por id.
+  const send = e.target.closest('.comment-add').querySelector('button[data-action$="add-comment"]');
   if(send) send.click();
 });
 
@@ -1416,7 +2336,7 @@ function renderChecklistEditor(){
     row.innerHTML = `
       <span class="drag-handle" data-drag-handle title="Arraste para reordenar">⠿</span>
       <input type="checkbox" ${item.done ? 'checked' : ''} data-idx="${idx}" class="ci-done">
-      <input type="text" value="${escapeHtml(item.text)}" data-idx="${idx}" class="ci-text">
+      <input type="text" value="${escapeAttr(item.text)}" data-idx="${idx}" class="ci-text">
       <button type="button" data-idx="${idx}" class="ci-remove">✕</button>
     `;
     list.appendChild(row);
@@ -1498,8 +2418,43 @@ document.getElementById('saveModal').addEventListener('click', async ()=>{
   render();
 });
 
-// ---- Category modal ----
-function openCatModal(){
+// ---- Categorias (compartilhado entre Demandas e Inventário) ----
+// As duas abas têm listas de categoria próprias, mas as telas de criar,
+// renomear e excluir são as mesmas. Em vez de duplicar ~80 linhas e a regra de
+// propagação do rename, os modais operam sobre um escopo.
+const UNCATEGORIZED = 'Sem categoria';
+
+const CAT_SCOPES = {
+  tasks: {
+    list: ()=> categories,
+    items: ()=> tasks,
+    saveList: ()=> saveCategories(),
+    saveItems: ()=> saveTasks(),
+    refresh: ()=> populateCategorySelects(),
+    noun: (n)=> n === 1 ? 'tarefa' : 'tarefas',
+    orphans: 'tarefas órfãs',
+    target: 'fCategory',
+    onRename: (oldN, newN)=>{ if(activeCatFilter === oldN) activeCatFilter = newN; },
+    onDelete: (cat)=>{ if(activeCatFilter === cat) activeCatFilter = ''; },
+  },
+  inv: {
+    list: ()=> invCategories,
+    items: ()=> invItems,
+    saveList: ()=> saveInvCategories(),
+    saveItems: ()=> saveInventory(),
+    refresh: ()=> populateInvSelects(),
+    noun: (n)=> n === 1 ? 'item' : 'itens',
+    orphans: 'itens órfãos',
+    target: 'iCategory',
+    onRename: (oldN, newN)=>{ if(invFilters.category === oldN) invFilters.category = newN; },
+    onDelete: (cat)=>{ if(invFilters.category === cat) invFilters.category = ''; },
+  },
+};
+let catScope = 'tasks';
+function scope(){ return CAT_SCOPES[catScope]; }
+
+function openCatModal(which){
+  catScope = which || 'tasks';
   document.getElementById('newCatName').value = '';
   document.getElementById('catModalBackdrop').classList.add('open');
   setTimeout(()=>document.getElementById('newCatName').focus(), 50);
@@ -1507,20 +2462,23 @@ function openCatModal(){
 function closeCatModal(){
   document.getElementById('catModalBackdrop').classList.remove('open');
 }
-document.getElementById('openAddCategory').addEventListener('click', openCatModal);
-document.getElementById('inlineAddCategory').addEventListener('click', openCatModal);
+document.getElementById('openAddCategory').addEventListener('click', ()=> openCatModal('tasks'));
+document.getElementById('inlineAddCategory').addEventListener('click', ()=> openCatModal('tasks'));
+document.getElementById('iAddCategory').addEventListener('click', ()=> openCatModal('inv'));
 document.getElementById('cancelCatModal').addEventListener('click', closeCatModal);
 document.getElementById('catModalBackdrop').addEventListener('click', (e)=>{
   if(e.target.id === 'catModalBackdrop') closeCatModal();
 });
 document.getElementById('saveCatModal').addEventListener('click', async ()=>{
+  const sc = scope();
   const name = document.getElementById('newCatName').value.trim();
   if(!name){ return; }
-  if(categories.includes(name)){ alert('Essa categoria já existe.'); return; }
-  categories.push(name);
-  await saveCategories();
-  populateCategorySelects();
-  document.getElementById('fCategory').value = name;
+  if(sc.list().includes(name)){ alert('Essa categoria já existe.'); return; }
+  sc.list().push(name);
+  await sc.saveList();
+  sc.refresh();
+  const target = document.getElementById(sc.target);
+  if(target) target.value = name;
   render();
   closeCatModal();
 });
@@ -1528,20 +2486,18 @@ document.getElementById('newCatName').addEventListener('keydown', (e)=>{
   if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('saveCatModal').click(); }
 });
 
-// ---- Manage categories (rename / delete) ----
-const UNCATEGORIZED = 'Sem categoria';
-
 function renderManageCatList(){
+  const sc = scope();
   const list = document.getElementById('manageCatList');
   list.innerHTML = '';
-  categories.forEach((cat, idx)=>{
-    const count = tasks.filter(t=>t.category === cat).length;
+  sc.list().forEach((cat, idx)=>{
+    const count = sc.items().filter(t=>t.category === cat).length;
     const row = document.createElement('div');
     row.className = 'mc-row';
     row.innerHTML = `
       <span class="cat-dot" style="background:${colorForCategory(cat)}"></span>
-      <input type="text" value="${escapeHtml(cat)}" data-idx="${idx}" class="mc-rename">
-      <span class="mc-count">${count} ${count===1?'tarefa':'tarefas'}</span>
+      <input type="text" value="${escapeAttr(cat)}" data-idx="${idx}" class="mc-rename">
+      <span class="mc-count">${count} ${sc.noun(count)}</span>
       <button type="button" class="mc-delete" data-idx="${idx}" title="Excluir categoria">🗑</button>
     `;
     list.appendChild(row);
@@ -1563,58 +2519,788 @@ function renderManageCatList(){
 }
 
 async function commitRename(idx, rawValue){
-  const oldName = categories[idx];
+  const sc = scope();
+  const cats = sc.list();
+  const oldName = cats[idx];
   const newName = rawValue.trim();
   if(!newName || newName === oldName) { renderManageCatList(); return; }
-  if(categories.some((c,i)=> i!==idx && c.toLowerCase() === newName.toLowerCase())){
+  if(cats.some((c,i)=> i!==idx && c.toLowerCase() === newName.toLowerCase())){
     alert('Já existe uma categoria com esse nome.');
     renderManageCatList();
     return;
   }
-  categories[idx] = newName;
-  tasks.forEach(t=>{ if(t.category === oldName) t.category = newName; });
-  if(activeCatFilter === oldName) activeCatFilter = newName;
-  await saveCategories();
-  await saveTasks();
-  populateCategorySelects();
+  cats[idx] = newName;
+  sc.items().forEach(t=>{ if(t.category === oldName) t.category = newName; });
+  sc.onRename(oldName, newName);
+  await sc.saveList();
+  await sc.saveItems();
+  sc.refresh();
   renderManageCatList();
   render();
 }
 
 async function deleteCategory(idx){
-  const cat = categories[idx];
+  const sc = scope();
+  const cats = sc.list();
+  const cat = cats[idx];
   if(cat === UNCATEGORIZED){
-    alert('Essa categoria é reservada para tarefas órfãs e não pode ser excluída.');
+    alert('Essa categoria é reservada para registros órfãos e não pode ser excluída.');
     return;
   }
-  const count = tasks.filter(t=>t.category === cat).length;
+  const count = sc.items().filter(t=>t.category === cat).length;
   const msg = count > 0
-    ? `Excluir "${cat}"? ${count} tarefa(s) serão movidas para "${UNCATEGORIZED}".`
+    ? `Excluir "${cat}"? ${count} ${sc.noun(count)} serão movidos para "${UNCATEGORIZED}".`
     : `Excluir a categoria "${cat}"?`;
   if(!confirm(msg)) return;
 
-  categories.splice(idx, 1);
+  cats.splice(idx, 1);
   if(count > 0){
-    if(!categories.includes(UNCATEGORIZED)) categories.push(UNCATEGORIZED);
-    tasks.forEach(t=>{ if(t.category === cat) t.category = UNCATEGORIZED; });
+    if(!cats.includes(UNCATEGORIZED)) cats.push(UNCATEGORIZED);
+    sc.items().forEach(t=>{ if(t.category === cat) t.category = UNCATEGORIZED; });
   }
-  if(activeCatFilter === cat) activeCatFilter = '';
-  await saveCategories();
-  await saveTasks();
-  populateCategorySelects();
+  sc.onDelete(cat);
+  await sc.saveList();
+  await sc.saveItems();
+  sc.refresh();
   renderManageCatList();
   render();
 }
 
-document.getElementById('openManageCategories').addEventListener('click', ()=>{
+function openManageCats(which){
+  catScope = which || 'tasks';
   renderManageCatList();
   document.getElementById('manageCatBackdrop').classList.add('open');
-});
+}
+document.getElementById('openManageCategories').addEventListener('click', ()=> openManageCats('tasks'));
+document.getElementById('invOpenManageCats').addEventListener('click', ()=> openManageCats('inv'));
 document.getElementById('closeManageCatModal').addEventListener('click', ()=>{
   document.getElementById('manageCatBackdrop').classList.remove('open');
 });
 document.getElementById('manageCatBackdrop').addEventListener('click', (e)=>{
   if(e.target.id === 'manageCatBackdrop') document.getElementById('manageCatBackdrop').classList.remove('open');
+});
+
+// ================= INVENTÁRIO: renderização =================
+
+let invSort = { key:'title', dir:'asc' };
+const invFilters = { q:'', category:'', room:'', owner:'', destination:'', risk:false };
+
+// "Sofa" acha "Sofá"; "geladeira" acha "Geladeira Brastemp".
+function norm(v){
+  return String(v || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+}
+
+function visibleItems(){
+  const q = norm(invFilters.q);
+  return invItems.filter(it =>
+    (!invFilters.destination || it.destination === invFilters.destination) &&
+    (!invFilters.category    || it.category === invFilters.category) &&
+    (!invFilters.room        || it.room === invFilters.room) &&
+    (!invFilters.owner       || it.owner === invFilters.owner) &&
+    (!invFilters.risk        || !!itemRisk(it)) &&
+    (!q || norm(it.title).includes(q) || norm(it.notes).includes(q) || norm(it.buyer).includes(q))
+  );
+}
+
+const SORT_KEYS = {
+  title:      it => norm(it.title),
+  destination:it => DESTINATIONS.findIndex(d => d.id === it.destination),
+  saleStatus: it => it.destination === 'Vender' ? SALE_STAGES.indexOf(it.saleStatus) : null,
+  owner:      it => it.owner || '',
+  deadline:   it => it.deadline || null,
+  askPrice:   it => it.destination === 'Vender' ? it.askPrice : null,
+  soldPrice:  it => it.soldPrice,
+};
+const DESC_FIRST = new Set(['askPrice','soldPrice','deadline','saleStatus']);
+
+function sortItems(list){
+  const get = SORT_KEYS[invSort.key] || SORT_KEYS.title;
+  const mul = invSort.dir === 'desc' ? -1 : 1;
+  return list.slice().sort((a,b)=>{
+    const va = get(a), vb = get(b);
+    // Vazio sempre por último, nos dois sentidos: 30 linhas sem preço no topo
+    // enterram justamente a informação que motivou a ordenação.
+    const ea = va == null || va === '' || va === -1;
+    const eb = vb == null || vb === '' || vb === -1;
+    if(ea !== eb) return ea ? 1 : -1;
+    if(!ea){
+      if(typeof va === 'string'){ const c = va.localeCompare(vb, 'pt-BR'); if(c) return c * mul; }
+      else if(va !== vb) return (va - vb) * mul;
+    }
+    return norm(a.title).localeCompare(norm(b.title), 'pt-BR');
+  });
+}
+
+const NA = '<span class="na">—</span>';
+
+function destMeta(it){
+  return DESTINATIONS.find(d => d.id === it.destination) || DESTINATIONS[0];
+}
+function destBadge(it){
+  const d = destMeta(it);
+  return `<span class="dest-badge db-${d.cls}">${escapeHtml(d.id)}</span>`;
+}
+function stageBadge(it){
+  const i = Math.max(0, SALE_STAGES.indexOf(it.saleStatus));
+  return `<button class="st-badge st-${i}" data-action="inv-stage" data-id="${escapeAttr(it.id)}"
+    title="Clique avança, Alt+clique volta">${i === 4 ? '✓ ' : ''}${escapeHtml(it.saleStatus)}</button>`;
+}
+function riskBadge(it){
+  const r = itemRisk(it);
+  const label = it.deadline ? escapeHtml(fmtDate(it.deadline)) : '';
+  if(!r) return label ? `<span class="risk-badge">${label}</span>` : '';
+  if(r === 'late')  return `<span class="risk-badge risk-late" title="Prazo estourou">⚠ ${label}</span>`;
+  if(r === 'after') return `<span class="risk-badge risk-after" title="O prazo cai depois da data da mudança">⏳ ${label}</span>`;
+  return `<span class="risk-badge risk-none" title="Faltam menos de 30 dias e o item não tem prazo">· sem prazo</span>`;
+}
+function ownerShort(o){
+  return o === 'Ambos' ? 'H+T' : (o || '').slice(0,1);
+}
+// src só aceita caminho do nosso próprio /uploads — fecha javascript:/data:
+function thumbHtml(it){
+  const ok = typeof it.photo === 'string' && /^\/uploads\/[\w.\-]+$/.test(it.photo);
+  return ok
+    ? `<img class="inv-thumb" src="${escapeAttr(it.photo)}" alt="" loading="lazy" decoding="async"
+         width="34" height="34" data-action="inv-zoom" data-id="${escapeAttr(it.id)}"
+         onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'inv-thumb no-photo',textContent:'🖼'}))">`
+    : `<span class="inv-thumb no-photo" title="Sem foto">🖼</span>`;
+}
+
+function invRowHtml(it){
+  const d = destMeta(it);
+  const sells = it.destination === 'Vender';
+  const done = isResolved(it);
+  const open = openPanels.has('inv-' + it.id);
+  const nCom = (it.comments || []).length;
+  return `
+  <tr class="inv-row dest-${d.cls}${done ? ' is-resolved' : ''}${sells ? '' : ' no-money'}" data-id="${escapeAttr(it.id)}">
+    <td class="c-exp"><button class="inv-exp${open ? ' open' : ''}" data-action="inv-toggle" data-id="${escapeAttr(it.id)}" title="Detalhes">▸</button></td>
+    <td class="c-photo">${thumbHtml(it)}</td>
+    <td class="c-name">
+      <span class="inv-name">${escapeHtml(it.title)}</span>
+      <span class="inv-sub">${it.category ? `<i class="cat-dot" style="background:${colorForCategory(it.category)}"></i>${escapeHtml(it.category)}` : ''}${it.room ? ` · ${escapeHtml(it.room)}` : ''}</span>
+      <span class="sm-only">${destBadge(it)}${sells ? stageBadge(it) : ''}${riskBadge(it)}</span>
+    </td>
+    <td class="c-dest">${destBadge(it)}</td>
+    <td class="c-status">${sells ? stageBadge(it) : NA}</td>
+    <td class="c-owner"><span class="who" title="${escapeAttr(it.owner)}">${escapeHtml(ownerShort(it.owner))}</span></td>
+    <td class="c-prazo">${riskBadge(it) || NA}</td>
+    <td class="c-ask money">${sells
+      ? `<span class="m-ask">${it.askPrice == null ? NA : fmtMoneyPlain(it.askPrice)}</span>${
+          it.minPrice != null ? `<span class="m-min" title="Preço mínimo — combinado nosso, não vai no anúncio">🔒 ${fmtMoneyPlain(it.minPrice)}</span>` : ''}`
+      : NA}</td>
+    <td class="c-sold money">${sells && it.saleStatus === 'Vendido'
+      ? `<span class="m-sold">${it.soldPrice == null ? NA : fmtMoneyPlain(it.soldPrice)}</span>${
+          it.buyer ? `<span class="m-buyer">${escapeHtml(it.buyer)}</span>` : ''}`
+      : NA}</td>
+    <td class="c-act">
+      <button data-action="inv-edit" data-id="${escapeAttr(it.id)}" title="Editar">✎</button>
+      ${sells ? `<button data-action="inv-ad" data-id="${escapeAttr(it.id)}" title="Gerar texto do anúncio">📋</button>` : '<span class="act-gap">·</span>'}
+      <button class="cm${nCom ? ' has' : ''}" data-action="inv-comments" data-id="${escapeAttr(it.id)}" title="Comentários">💬${nCom ? ' ' + nCom : ''}</button>
+    </td>
+  </tr>${open ? invDetailHtml(it) : ''}`;
+}
+
+// escapeAttr impede quebrar o atributo, mas não impede um href "javascript:".
+// O link do anúncio é digitado por uma pessoa e clicado pela outra, então o
+// esquema precisa ser conferido — sem isso, um link colado executa script.
+function safeUrl(u){
+  const v = String(u || '').trim();
+  if(!v) return null;
+  if(/^https?:\/\//i.test(v)) return v;
+  // sem esquema ("olx.com.br/x") assume https, que é o que a pessoa quis dizer
+  if(/^[\w.\-]+\.[a-z]{2,}(\/|$)/i.test(v)) return 'https://' + v;
+  return null;
+}
+
+function dtCell(label, value, url, cls){
+  if(!value) return '';
+  const safe = safeUrl(url);
+  const body = safe
+    ? `<a href="${escapeAttr(safe)}" target="_blank" rel="noopener noreferrer">${escapeHtml(value)} ↗</a>`
+    : escapeHtml(value);
+  return `<div class="dt-cell ${cls || ''}"><span class="dt-label">${escapeHtml(label)}</span><span class="dt-value">${body}</span></div>`;
+}
+
+function invDetailHtml(it){
+  const c = it.comments || [];
+  const sells = it.destination === 'Vender';
+  return `
+  <tr class="inv-detail" data-id="${escapeAttr(it.id)}">
+    <td colspan="10">
+      <div class="dt-grid">
+        ${dtCell('Estado', it.condition)}
+        ${dtCell('Anunciado em', it.channel, it.listingUrl || null)}
+        ${it.saleDate ? dtCell('Vendido em', fmtDate(it.saleDate)) : ''}
+        ${it.buyer ? dtCell('Comprador', it.buyer) : ''}
+        ${it.minPrice != null && sells ? dtCell('Piso 🔒', fmtMoney(it.minPrice)) : ''}
+        ${dtCell('Observações', it.notes, null, 'wide')}
+      </div>
+      ${!sells && it.destination !== 'A decidir' ? `
+      <label class="dt-resolve">
+        <input type="checkbox" data-action="inv-resolve" data-id="${escapeAttr(it.id)}" ${it.resolvedAt ? 'checked' : ''}>
+        Já saiu de casa${it.resolvedAt ? ` · ${fmtDateTime(it.resolvedAt)}` : ''}
+      </label>` : ''}
+      <div class="dt-thread">
+        ${c.length ? c.map(cm => `
+        <div class="comment">
+          <div class="comment-head">
+            <span class="comment-author">${escapeHtml(cm.author)}</span>
+            <span>${fmtDateTime(cm.at)}</span>
+            <button class="comment-delete" data-action="inv-del-comment" data-id="${escapeAttr(it.id)}" data-comment="${escapeAttr(cm.id)}" title="Excluir comentário">✕</button>
+          </div>
+          <p class="comment-text">${escapeHtml(cm.text)}</p>
+        </div>`).join('') : '<p class="comment-empty">Nenhum registro de negociação ainda.</p>'}
+        <div class="comment-add">
+          <textarea id="icmt-${escapeAttr(it.id)}" data-id="${escapeAttr(it.id)}" rows="2" placeholder="Ex: ofereceu 1.700, busca sábado…">${escapeHtml(commentDrafts.get(it.id) || '')}</textarea>
+          <button data-action="inv-add-comment" data-id="${escapeAttr(it.id)}">Enviar</button>
+        </div>
+        <p class="comment-hint">⌘/Ctrl + Enter para enviar${it.lastEditedBy ? ` · ✎ ${escapeHtml(it.lastEditedBy)} ${fmtDateTime(it.lastEditedAt)}` : ''}</p>
+      </div>
+      <div class="dt-actions">
+        <button class="add-btn ghost" data-action="inv-edit" data-id="${escapeAttr(it.id)}">✎ Editar</button>
+        ${sells ? `<button class="add-btn ghost" data-action="inv-ad" data-id="${escapeAttr(it.id)}">📋 Anúncio</button>` : ''}
+        <button class="add-btn ghost danger" data-action="inv-delete" data-id="${escapeAttr(it.id)}">🗑 Excluir</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function renderInventory(){
+  renderInvChips();
+  const list = sortItems(visibleItems());
+  document.getElementById('invBody').innerHTML = list.length
+    ? list.map(invRowHtml).join('')
+    : '<tr class="inv-empty"><td colspan="10">Nenhum item com esses filtros.</td></tr>';
+
+  document.querySelectorAll('#invHead th[data-sort]').forEach(th=>{
+    const on = th.dataset.sort === invSort.key;
+    th.classList.toggle('sorted', on);
+    const a = th.querySelector('.arrow');
+    if(a) a.textContent = on ? (invSort.dir === 'asc' ? '↑' : '↓') : '⇅';
+  });
+
+  renderInvTotals(list);
+}
+
+function renderInvTotals(list){
+  const t = invTotals(list);
+  const parts = [`<b>${t.count}</b> ${t.count === 1 ? 'item' : 'itens'} no filtro`];
+  if(t.forSale) parts.push(`<b>${t.forSale}</b> à venda`);
+  if(t.sold) parts.push(`<b>${t.sold}</b> vendidos`);
+  if(t.unpriced) parts.push(`<span class="warn">⚠ ${t.unpriced} sem preço</span>`);
+  document.getElementById('invFootLeft').innerHTML = invSaveFailed
+    ? '<span class="warn">⚠ Não deu para salvar — verifique a conexão e recarregue a página</span>'
+    : parts.join(' · ');
+  document.getElementById('invFootAsk').textContent = t.asked ? fmtMoney(t.asked) : '—';
+  document.getElementById('invFootFloor').textContent = t.floor ? '🔒 piso ' + fmtMoney(t.floor) : '';
+  document.getElementById('invFootRecv').textContent = t.received ? fmtMoney(t.received) : '—';
+}
+
+function renderInvChips(){
+  const el = document.getElementById('invChips');
+  el.innerHTML = '';
+  DESTINATIONS.forEach(d=>{
+    const list = invItems.filter(i => i.destination === d.id);
+    const chip = document.createElement('div');
+    chip.className = 'inv-chip' + (invFilters.destination === d.id ? ' active' : '');
+    chip.dataset.dest = d.id;
+    const okN = list.filter(isResolved).length;
+    chip.innerHTML = `<span class="cat-dot" style="background:${destColor(d.cls)}"></span>${escapeHtml(d.id)} <span class="n"><b>${list.length}</b>${okN ? ` · ${okN} ok` : ''}</span>`;
+    el.appendChild(chip);
+  });
+  const risky = invItems.filter(i => itemRisk(i)).length;
+  const chip = document.createElement('div');
+  chip.className = 'inv-chip' + (invFilters.risk ? ' active' : '');
+  chip.dataset.risk = '1';
+  chip.innerHTML = `⚠ Em risco <span class="n"><b>${risky}</b></span>`;
+  el.appendChild(chip);
+}
+
+function destColor(cls){
+  return { vender:'#e8a33d', levar:'#3e8e7e', doar:'#6a5acd', descartar:'#a9a294', adecidir:'#c3bba8' }[cls] || '#c3bba8';
+}
+
+function populateInvSelects(){
+  const uniq = f => [...new Set(invItems.map(f).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const rooms = [...new Set([...DEFAULT_ROOMS, ...uniq(i=>i.room)])];
+
+  fillSelect(document.getElementById('invFilterCategory'), invCategories, 'Todas as categorias');
+  fillSelect(document.getElementById('invFilterRoom'), rooms, 'Todos os cômodos');
+  fillSelect(document.getElementById('invQuickRoom'), rooms, '— cômodo —');
+  fillSelect(document.getElementById('iCategory'), invCategories, null);
+  fillSelect(document.getElementById('iDestination'), DESTINATIONS.map(d=>d.id), null);
+  fillSelect(document.getElementById('iSaleStatus'), SALE_STAGES, null);
+  document.getElementById('roomOptions').innerHTML =
+    rooms.map(r => `<option value="${escapeAttr(r)}">`).join('');
+}
+
+function fillSelect(el, values, placeholder){
+  if(!el) return;
+  const cur = el.value;
+  el.innerHTML = (placeholder ? `<option value="">${escapeHtml(placeholder)}</option>` : '') +
+    values.map(v => `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('');
+  if(cur && values.includes(cur)) el.value = cur;
+}
+
+// ================= INVENTÁRIO: interações =================
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=> el.classList.remove('show'), 2200);
+}
+
+function fmtDateBR(iso){
+  const [y,m,d] = String(iso).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// ---- Captura rápida ----
+// Uma casa inteira são ~80 itens. Passar cada um por um modal de 15 campos
+// garante que a aba não seja usada: aqui o item nasce só com nome e cômodo,
+// em 'A decidir', e ganha preço/foto/destino depois — se merecer.
+document.getElementById('invQuickName').addEventListener('keydown', async (e)=>{
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  const input = e.target;
+  const title = input.value.trim();
+  if(!title) return;
+  const it = normalizeItem({
+    id: newInvId(),
+    title,
+    room: document.getElementById('invQuickRoom').value,
+    destination: 'A decidir',
+    order: nextInvOrder(),
+  });
+  stampEdit(it);
+  invItems.push(it);
+  input.value = '';
+  populateInvSelects();
+  render();
+  input.focus();
+  saveInventorySoon();
+});
+
+// ---- Filtros, busca e ordenação ----
+let invSearchTimer = null;
+document.getElementById('invSearch').addEventListener('input', (e)=>{
+  invFilters.q = e.target.value;
+  clearTimeout(invSearchTimer);
+  invSearchTimer = setTimeout(render, 150);
+});
+[['invFilterCategory','category'],['invFilterRoom','room'],['invFilterOwner','owner']].forEach(([id,key])=>{
+  document.getElementById(id).addEventListener('change', (e)=>{
+    invFilters[key] = e.target.value;
+    render();
+  });
+});
+document.getElementById('invClearFilters').addEventListener('click', ()=>{
+  invFilters.q = invFilters.category = invFilters.room = invFilters.owner = invFilters.destination = '';
+  invFilters.risk = false;
+  document.getElementById('invSearch').value = '';
+  ['invFilterCategory','invFilterRoom','invFilterOwner'].forEach(id=> document.getElementById(id).value = '');
+  render();
+});
+document.getElementById('invChips').addEventListener('click', (e)=>{
+  const chip = e.target.closest('.inv-chip');
+  if(!chip) return;
+  if(chip.dataset.risk){
+    invFilters.risk = !invFilters.risk;
+  } else {
+    invFilters.destination = invFilters.destination === chip.dataset.dest ? '' : chip.dataset.dest;
+  }
+  render();
+});
+document.getElementById('invHead').addEventListener('click', (e)=>{
+  const th = e.target.closest('th[data-sort]');
+  if(!th) return;
+  const k = th.dataset.sort;
+  invSort = invSort.key === k
+    ? { key:k, dir: invSort.dir === 'asc' ? 'desc' : 'asc' }
+    : { key:k, dir: DESC_FIRST.has(k) ? 'desc' : 'asc' };
+  render();
+});
+
+// ---- Ações da tabela ----
+// Listener próprio, com ações prefixadas 'inv-'. O handler das demandas casa
+// button[data-action] e trata toggle-comments ANTES do `if(!task) return`, então
+// reusar aqueles nomes faria o painel abrir e fechar no mesmo clique.
+document.addEventListener('click', async (e)=>{
+  const el = e.target.closest('[data-action^="inv-"]');
+  if(!el) return;
+  const id = el.dataset.id;
+  const action = el.dataset.action;
+  const it = invItems.find(x => x.id === id);
+  if(!it) return;
+
+  if(action === 'inv-toggle' || action === 'inv-comments'){
+    const key = 'inv-' + id;
+    if(openPanels.has(key)) openPanels.delete(key); else openPanels.add(key);
+    render();
+    if(openPanels.has(key) && action === 'inv-comments'){
+      const box = document.getElementById('icmt-' + id);
+      if(box) box.focus();
+    }
+    return;
+  }
+  if(action === 'inv-edit'){ openInvModal(it); return; }
+  if(action === 'inv-ad'){ openAdModal(it); return; }
+  if(action === 'inv-zoom'){
+    document.getElementById('photoBig').src = it.photo;
+    document.getElementById('photoBackdrop').classList.add('open');
+    return;
+  }
+
+  let refocus = null;
+  let photoToDrop = null;
+  if(action === 'inv-stage'){
+    const i = SALE_STAGES.indexOf(it.saleStatus);
+    const target = SALE_STAGES[Math.min(Math.max(i + (e.altKey ? -1 : 1), 0), SALE_STAGES.length - 1)];
+    // Vendido é o momento em que preço realizado, comprador e data existem —
+    // então em vez de gravar direto, abre o modal pedindo os três.
+    if(target === 'Vendido'){ openInvModal(it, { stage:'Vendido' }); return; }
+    it.saleStatus = target;
+    stampEdit(it);
+  } else if(action === 'inv-add-comment'){
+    const box = document.getElementById('icmt-' + id);
+    const text = box ? box.value.trim() : '';
+    if(!text) return;
+    if(!it.comments) it.comments = [];
+    it.comments.push({
+      id: 'c-' + Date.now() + Math.random().toString(36).slice(2,6),
+      author: getCurrentUser() || 'Ambos',
+      text,
+      at: new Date().toISOString(),
+    });
+    stampEdit(it);
+    commentDrafts.delete(id);
+    refocus = 'icmt-' + id;
+  } else if(action === 'inv-delete'){
+    if(!confirm(`Excluir "${it.title}" do inventário?`)) return;
+    invItems = invItems.filter(x => x.id !== id);
+    openPanels.delete('inv-' + id);
+    commentDrafts.delete(id);
+    photoToDrop = it.photo;   // apagado só depois de a exclusão ir para o banco
+  } else if(action === 'inv-del-comment'){
+    if(!confirm('Excluir este comentário?')) return;
+    it.comments = (it.comments || []).filter(c => c.id !== el.dataset.comment);
+    stampEdit(it);
+  } else {
+    return;
+  }
+  const gravou = await saveInventory();
+  // Falhou a gravação: o item continua no banco, então a foto dele também tem
+  // que continuar existindo.
+  if(gravou && photoToDrop) deletePhotoFile(photoToDrop);
+  render();
+  if(refocus){
+    const box = document.getElementById(refocus);
+    if(box) box.focus();
+  }
+});
+
+document.addEventListener('change', async (e)=>{
+  if(!e.target.matches('input[data-action="inv-resolve"]')) return;
+  const it = invItems.find(x => x.id === e.target.dataset.id);
+  if(!it) return;
+  it.resolvedAt = e.target.checked ? new Date().toISOString() : null;
+  stampEdit(it);
+  await saveInventory();
+  render();
+});
+
+document.getElementById('photoBackdrop').addEventListener('click', ()=>{
+  document.getElementById('photoBackdrop').classList.remove('open');
+});
+
+// ---- Modal do item ----
+let editingPhoto = null;
+let editingPhotoOriginal = null;
+let editingPhotoScrap = [];
+let previewBlobUrl = null;
+// Cada abertura do modal ganha um número. Um upload lento que termina depois
+// de fechar não pode pintar a foto no item seguinte — e, pior, fazer o save
+// desse item apagar a foto dele.
+let modalGeneration = 0;
+
+function openInvModal(it, opts){
+  opts = opts || {};
+  modalGeneration++;
+  editingInvId = it ? it.id : null;
+  editingPhoto = it ? it.photo : null;
+  editingPhotoOriginal = editingPhoto;
+  editingPhotoScrap = [];
+
+  populateInvSelects();
+  document.getElementById('invModalTitle').textContent = it ? 'Editar item' : 'Novo item';
+  document.getElementById('iTitle').value = it ? it.title : '';
+  document.getElementById('iCategory').value = it ? it.category : invCategories[0];
+  document.getElementById('iRoom').value = it ? it.room : (document.getElementById('invQuickRoom').value || '');
+  document.getElementById('iCondition').value = it ? it.condition : 'Bom';
+  document.getElementById('iOwner').value = it ? it.owner : 'Ambos';
+  document.getElementById('iDestination').value = it ? it.destination : 'A decidir';
+  document.getElementById('iDeadline').value = it ? (it.deadline || '') : '';
+  document.getElementById('iSaleStatus').value = opts.stage || (it ? it.saleStatus : 'Não anunciado');
+  document.getElementById('iAsk').value = it ? moneyToInput(it.askPrice) : '';
+  document.getElementById('iMin').value = it ? moneyToInput(it.minPrice) : '';
+  document.getElementById('iSold').value = it ? moneyToInput(it.soldPrice) : '';
+  document.getElementById('iBuyer').value = it ? it.buyer : '';
+  document.getElementById('iChannel').value = it ? it.channel : '';
+  document.getElementById('iListingUrl').value = it ? it.listingUrl : '';
+  document.getElementById('iSaleDate').value = it ? (it.saleDate || '') : '';
+  document.getElementById('iNotes').value = it ? it.notes : '';
+  if(opts.stage === 'Vendido') document.getElementById('iDestination').value = 'Vender';
+
+  document.getElementById('iPhotoFile').value = '';
+  setPhotoPreview(editingPhoto);
+  setPhotoState('');
+  syncCondFields();
+  document.getElementById('invModalBackdrop').classList.add('open');
+  if(opts.stage === 'Vendido') setTimeout(()=> document.getElementById('iSold').focus(), 60);
+}
+
+function closeInvModal(committed){
+  modalGeneration++;   // invalida qualquer upload ainda em vôo
+  settlePhotos(committed);
+  document.getElementById('invModalBackdrop').classList.remove('open');
+  editingInvId = null;
+  if(previewBlobUrl){ URL.revokeObjectURL(previewBlobUrl); previewBlobUrl = null; }
+}
+
+// Doar/Descartar/Levar não têm preço nem pipeline; o bloco some inteiro, mas os
+// valores continuam no DOM e no registro — trocar de destino nunca apaga dado.
+function syncCondFields(){
+  const dest = document.getElementById('iDestination').value;
+  const status = document.getElementById('iSaleStatus').value;
+  document.getElementById('iSaleBlock').classList.toggle('off', dest !== 'Vender');
+  const closing = dest === 'Vender' && (status === 'Vendido' || status === 'Reservado');
+  document.getElementById('iCloseBlock').classList.toggle('off', !closing);
+  const d = document.getElementById('iSaleDate');
+  if(status === 'Vendido' && !d.value) d.value = todayISO();
+}
+document.getElementById('iDestination').addEventListener('change', syncCondFields);
+document.getElementById('iSaleStatus').addEventListener('change', syncCondFields);
+
+// Normaliza no blur: digita "1200", sai do campo e vê "1.200,00" — a
+// confirmação de que foi lido como mil e duzentos vem antes de salvar.
+['iAsk','iMin','iSold'].forEach(id=>{
+  const el = document.getElementById(id);
+  el.addEventListener('blur', ()=>{ el.value = moneyToInput(parseMoney(el.value)); });
+  el.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); el.blur(); } });
+});
+
+document.getElementById('iCancel').addEventListener('click', ()=> closeInvModal(false));
+document.getElementById('invModalBackdrop').addEventListener('click', (e)=>{
+  if(e.target.id === 'invModalBackdrop') closeInvModal(false);
+});
+
+document.getElementById('iSave').addEventListener('click', async ()=>{
+  const title = document.getElementById('iTitle').value.trim();
+  if(!title){ alert('Dê um nome para o item.'); return; }
+  const data = {
+    title,
+    category: document.getElementById('iCategory').value,
+    room: document.getElementById('iRoom').value.trim(),
+    condition: document.getElementById('iCondition').value,
+    owner: document.getElementById('iOwner').value,
+    destination: document.getElementById('iDestination').value,
+    deadline: document.getElementById('iDeadline').value || null,
+    saleStatus: document.getElementById('iSaleStatus').value,
+    askPrice: parseMoney(document.getElementById('iAsk').value),
+    minPrice: parseMoney(document.getElementById('iMin').value),
+    soldPrice: parseMoney(document.getElementById('iSold').value),
+    buyer: document.getElementById('iBuyer').value.trim(),
+    channel: document.getElementById('iChannel').value.trim(),
+    listingUrl: document.getElementById('iListingUrl').value.trim(),
+    saleDate: document.getElementById('iSaleDate').value || null,
+    notes: document.getElementById('iNotes').value.trim(),
+    photo: editingPhoto,
+  };
+  if(editingInvId){
+    const it = invItems.find(x => x.id === editingInvId);
+    Object.assign(it, data);
+    stampEdit(it);
+  } else {
+    const it = normalizeItem(Object.assign({ id:newInvId(), order:nextInvOrder() }, data));
+    stampEdit(it);
+    invItems.push(it);
+  }
+  // Se a gravação falhou, o banco ainda aponta para a foto antiga — tratar
+  // como commit apagaria um arquivo que o registro salvo ainda usa.
+  const gravou = await saveInventory();
+  closeInvModal(gravou);
+  populateInvSelects();
+  render();
+});
+
+// ---- Foto ----
+function setPhotoPreview(url){
+  const prev = document.getElementById('iPhotoPrev');
+  if(url){ prev.src = url; prev.classList.remove('off'); }
+  else { prev.removeAttribute('src'); prev.classList.add('off'); }
+}
+function setPhotoState(msg, isError){
+  const el = document.getElementById('iPhotoState');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  document.getElementById('iSave').disabled = msg === 'enviando…';
+}
+
+// Foto de celular tem 3-8 MB e ~4000 px de lado. Reduzir no canvas troca isso
+// por ~200 KB — é o que torna o upload viável no 4G e mantém o volume pequeno.
+// O re-encode ainda descarta o EXIF inteiro (inclusive a geolocalização de
+// dentro de casa) e normaliza HEIC de iPhone para JPEG.
+async function downscaleImage(file, maxEdge, quality){
+  maxEdge = maxEdge || 1280; quality = quality || 0.82;
+  const bmp = await createImageBitmap(file, { imageOrientation:'from-image' }).catch(()=>null);
+  if(!bmp) return file;
+  const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+  if(scale === 1 && file.size < 600 * 1024){ bmp.close(); return file; }
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * scale);
+  c.height = Math.round(bmp.height * scale);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close();
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', quality));
+  return blob || file;
+}
+
+document.getElementById('iPhotoFile').addEventListener('change', async (e)=>{
+  const raw = e.target.files && e.target.files[0];
+  if(!raw) return;
+  if(!/^image\//.test(raw.type)){ alert('Escolha uma imagem.'); return; }
+
+  const gen = modalGeneration;
+  if(previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+  previewBlobUrl = URL.createObjectURL(raw);
+  setPhotoPreview(previewBlobUrl);          // preview instantâneo, antes do upload
+  setPhotoState('enviando…');
+
+  try{
+    const blob = await downscaleImage(raw);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': blob.type || 'image/jpeg' },
+      body: blob,
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const { url } = await res.json();
+    // Modal já fechou ou trocou de item: a foto não é mais deste contexto.
+    // Descarta o arquivo em vez de pintá-lo no item errado.
+    if(gen !== modalGeneration){ deletePhotoFile(url); return; }
+    if(editingPhoto && editingPhoto !== editingPhotoOriginal) editingPhotoScrap.push(editingPhoto);
+    editingPhoto = url;
+    setPhotoPreview(url);
+    setPhotoState('foto enviada ✓');
+  }catch(err){
+    console.error(err);
+    if(gen !== modalGeneration) return;
+    setPhotoState('não deu para enviar — salve o item e tente de novo', true);
+  }
+});
+
+document.getElementById('iPhotoRemove').addEventListener('click', ()=>{
+  if(editingPhoto && editingPhoto !== editingPhotoOriginal) editingPhotoScrap.push(editingPhoto);
+  editingPhoto = null;
+  setPhotoPreview(null);
+  setPhotoState('');
+  document.getElementById('iPhotoFile').value = '';   // senão reescolher o mesmo arquivo não dispara change
+});
+
+// Best-effort: o item já foi salvo apontando para outra foto, então falhar aqui
+// só deixa um arquivo de 200 KB no volume. Nunca bloqueia, nunca avisa.
+function deletePhotoFile(url){
+  if(!url) return;
+  // Guarda contra apagar arquivo que algum item ainda referencia — pela UI
+  // não acontece (cada upload tem nome único), mas um blob restaurado à mão
+  // pode ter dois itens na mesma foto.
+  if(invItems.some(i => i.photo === url)) return;
+  fetch('/api/upload/' + encodeURIComponent(url.split('/').pop()), { method:'DELETE' }).catch(()=>{});
+}
+function settlePhotos(committed){
+  editingPhotoScrap.forEach(deletePhotoFile);
+  if(committed){
+    if(editingPhotoOriginal && editingPhotoOriginal !== editingPhoto) deletePhotoFile(editingPhotoOriginal);
+  } else {
+    if(editingPhoto && editingPhoto !== editingPhotoOriginal) deletePhotoFile(editingPhoto);
+  }
+  editingPhotoScrap = [];
+}
+
+// ---- Texto do anúncio ----
+// NUNCA inclui minPrice: o mínimo existe justamente para não ir para o anúncio.
+function adText(it){
+  const L = [it.title, ''];
+  if(it.condition) L.push('Estado: ' + it.condition);
+  if(it.askPrice != null) L.push('Valor: ' + fmtMoney(it.askPrice));
+  if(it.category) L.push('Categoria: ' + it.category);
+  if(it.notes && it.notes.trim()){ L.push(''); L.push(it.notes.trim()); }
+  L.push('');
+  const limit = it.deadline || moveDateValue();
+  L.push(limit
+    ? `Estamos de mudança para o Canadá e o item precisa sair até ${fmtDateBR(limit)}.`
+    : 'Venda por motivo de mudança — estamos indo morar no Canadá.');
+  L.push('Retirada no local, combinamos o melhor horário.');
+  L.push('Aceito PIX. Chame no WhatsApp que respondo rápido.');
+  return L.join('\n');
+}
+
+function openAdModal(it){
+  document.getElementById('adText').value = adText(it);
+  document.getElementById('adBackdrop').classList.add('open');
+}
+document.getElementById('adClose').addEventListener('click', ()=>{
+  document.getElementById('adBackdrop').classList.remove('open');
+});
+document.getElementById('adBackdrop').addEventListener('click', (e)=>{
+  if(e.target.id === 'adBackdrop') document.getElementById('adBackdrop').classList.remove('open');
+});
+
+// navigator.clipboard exige contexto seguro: no Railway (https) funciona, mas
+// aberto pelo IP da rede local a API nem existe — daí o execCommand, que
+// precisa rodar de forma síncrona dentro do gesto do usuário.
+function copyText(text){
+  if(navigator.clipboard && window.isSecureContext){
+    return navigator.clipboard.writeText(text).then(()=>true).catch(()=>legacyCopy(text));
+  }
+  return Promise.resolve(legacyCopy(text));
+}
+function legacyCopy(text){
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');            // evita o teclado subir no iOS
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+    document.body.appendChild(ta);              // display:none não copia
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }catch(e){ return false; }
+}
+document.getElementById('adCopy').addEventListener('click', async ()=>{
+  const ta = document.getElementById('adText');
+  const ok = await copyText(ta.value);
+  if(ok){ toast('Texto copiado ✓'); }
+  else {
+    ta.focus(); ta.select();
+    toast('Não deu para copiar sozinho — o texto está selecionado, use ⌘/Ctrl + C');
+  }
+});
+
+// Sem polling: no celular isso dispara a cada desbloqueio, que é exatamente o
+// ritmo da triagem. Não redesenha por baixo de um modal aberto.
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState !== 'visible') return;
+  if(document.querySelector('.modal-backdrop.open')) return;
+  await flushInventorySave();          // grava o que está em debounce primeiro
+  await loadInventory({ silent:true });
 });
 
 // ---- Drag and drop (pointer events: funciona com mouse e com toque) ----
@@ -1833,7 +3519,11 @@ async function dropCardChecklistItem(container){
 }
 
 ensureIdentity();
+// setView antes das cargas: o render() do fim de loadAll() precisa saber para
+// qual aba despachar, senão desenha a errada na primeira pintura.
+setView(viewFromHash());
 loadAll();
+loadInventory();
 loadMoveDate();
 </script>
 </body>
