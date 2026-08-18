@@ -957,6 +957,70 @@
      seletor de arquivo com o padding de um input. */
   .photo-btns input[type=file]{width:auto;padding:0;border:none;background:none;font-size:12px;}
 
+  /* ---- recebimentos e story ---- */
+  .receipts{border:1px solid #d8cfb6;border-radius:8px;padding:8px;background:#fff;}
+  .rc-empty{
+    margin:0 0 6px;font-family:'IBM Plex Mono',monospace;font-size:10px;
+    color:var(--ink-soft);font-style:italic;
+  }
+  .rc-row{
+    display:flex;align-items:center;gap:8px;padding:4px 0;
+    border-bottom:1px dashed rgba(0,0,0,0.12);
+  }
+  .rc-row:last-of-type{border-bottom:none;}
+  .rc-amount{
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;
+    font-variant-numeric:tabular-nums;flex:0 0 auto;
+  }
+  .rc-date{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);flex:1 1 auto;}
+  .rc-remove{
+    border:none;background:none;color:var(--ink-soft);cursor:pointer;
+    font-size:12px;padding:2px 5px;border-radius:5px;flex:0 0 auto;
+  }
+  .rc-remove:hover{background:rgba(217,99,90,0.15);color:var(--coral);}
+  .rc-add-row{display:flex;gap:6px;margin-top:8px;}
+  .rc-add-row input{
+    padding:7px 9px;border-radius:6px;border:1px solid #d8cfb6;
+    font-family:'Inter',sans-serif;font-size:13px;background:#fff;color:var(--ink);
+  }
+  .rc-add-row #rcAmount{flex:1 1 auto;min-width:0;}
+  .rc-add-row #rcDate{flex:0 0 auto;}
+  .rc-add-row button{
+    flex:0 0 auto;padding:7px 12px;border-radius:6px;border:none;cursor:pointer;
+    background:var(--navy-900);color:var(--paper);font-size:13px;
+  }
+  .rc-total{
+    margin:8px 0 0;font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    color:var(--ink-soft);
+  }
+  .rc-total.pending{color:#8a5c14;}
+  .rc-total.done{color:#276a5a;}
+  .rc-total.over{color:var(--coral);}
+  .m-pending{
+    display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;
+    color:#8a5c14;margin-top:1px;
+  }
+  .story-row{display:flex;gap:8px;align-items:center;}
+  .story-row input{flex:1 1 auto;min-width:0;}
+  .story-row button{flex:0 0 auto;padding:7px 11px;font-size:12px;border-radius:6px;}
+  #iStoryField.off{display:none;}
+  .hint-priv.expired{color:var(--coral);}
+  /* O badge do story é clicável: um toque depois de repostar zera o contador. */
+  .risk-badge.story-on,.risk-badge.story-out{cursor:pointer;margin-left:4px;}
+  .risk-badge.story-on{background:rgba(106,90,205,0.16);color:#4b3fa0;}
+  .risk-badge.story-out{background:rgba(217,99,90,0.25);color:#a83a30;font-weight:600;}
+  .risk-badge.story-on:hover,.risk-badge.story-out:hover{filter:brightness(.94);}
+  .dt-receipts{
+    display:flex;flex-wrap:wrap;gap:6px;
+    margin:0 0 9px;padding-top:8px;border-top:1px dashed rgba(0,0,0,0.12);
+  }
+  .dt-receipt{
+    display:inline-flex;align-items:baseline;gap:6px;padding:3px 8px;border-radius:6px;
+    background:rgba(62,142,126,0.14);color:#276a5a;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
+  }
+  .dt-receipt i{font-style:normal;font-weight:400;opacity:.7;font-size:10px;}
+
   /* ---- toast ---- */
   .inv-toast{
     position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
@@ -1016,6 +1080,10 @@
     .tab-btn{flex:1;text-align:center;padding:8px 6px;}
     .inv-quick{flex-wrap:wrap;}
     .inv-quick input[type=text]{flex:1 1 100%;}
+    .rc-add-row{flex-wrap:wrap;}
+    .rc-add-row #rcAmount,.rc-add-row #rcDate{flex:1 1 100%;}
+    .story-row{flex-wrap:wrap;}
+    .story-row input,.story-row button{flex:1 1 100%;}
   }
 </style>
 </head>
@@ -1175,6 +1243,7 @@
         <div class="t-money">
           <span class="t-lab">Recebido (filtro)</span>
           <span class="t-val" id="invFootRecv">—</span>
+          <span class="t-min" id="invFootPending"></span>
         </div>
       </div>
     </div>
@@ -1355,7 +1424,7 @@
           <label>Onde anunciou</label>
           <input type="text" id="iChannel" list="channelOptions" placeholder="Ex: Marketplace">
           <datalist id="channelOptions">
-            <option>Facebook Marketplace</option><option>OLX</option>
+            <option>Stories do Instagram</option><option>Facebook Marketplace</option><option>OLX</option>
             <option>Enjoei</option><option>Grupo do prédio</option><option>WhatsApp</option>
           </datalist>
         </div>
@@ -1363,6 +1432,14 @@
           <label>Link do anúncio</label>
           <input type="text" id="iListingUrl" placeholder="https://…">
         </div>
+      </div>
+      <div class="field" id="iStoryField">
+        <label>Story postado em</label>
+        <div class="story-row">
+          <input type="datetime-local" id="iStoryPostedAt">
+          <button type="button" class="btn-secondary" id="iStoryNow">Postei agora</button>
+        </div>
+        <span class="hint-priv" id="iStoryHint"></span>
       </div>
       <fieldset class="sale-block" id="iCloseBlock">
         <legend>Fechamento</legend>
@@ -1376,9 +1453,27 @@
             <input type="text" id="iBuyer" placeholder="Nome / contato">
           </div>
         </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Data da venda</label>
+            <input type="date" id="iSaleDate">
+          </div>
+          <div class="field">
+            <label>Forma de pagamento</label>
+            <select id="iPaymentMethod"></select>
+          </div>
+        </div>
         <div class="field">
-          <label>Data da venda</label>
-          <input type="date" id="iSaleDate">
+          <label>Recebimentos</label>
+          <div class="receipts">
+            <div id="iReceiptList"></div>
+            <div class="rc-add-row">
+              <input type="text" id="rcAmount" inputmode="decimal" placeholder="Valor recebido">
+              <input type="date" id="rcDate">
+              <button type="button" id="rcAddBtn">Add</button>
+            </div>
+            <p class="rc-total" id="iReceiptTotal"></p>
+          </div>
         </div>
       </fieldset>
     </fieldset>
@@ -1439,6 +1534,10 @@ const DESTINATIONS = [
 ];
 const SALE_STAGES = ['Não anunciado','Anunciado','Negociando','Reservado','Vendido'];
 const CONDITIONS = ['Novo','Ótimo','Bom','Usado'];
+const PAYMENT_METHODS = ['PIX','Dinheiro','Transferência','Cartão','Outro'];
+// Story do Instagram some da timeline em 24h: passado isso o anúncio não está
+// mais no ar para ninguém, mesmo com o item ainda "Anunciado".
+const STORY_TTL_H = 24;
 const INV_UNCATEGORIZED = 'Sem categoria';
 
 let tasks = [];
@@ -1446,6 +1545,7 @@ let categories = [...DEFAULT_CATEGORIES];
 let invItems = [];
 let invCategories = [...DEFAULT_INV_CATEGORIES];
 let editingInvId = null;
+let editingReceipts = [];
 let editingId = null;
 let editingChecklist = [];
 
@@ -1514,6 +1614,7 @@ async function saveCategories(){
 // ---- Inventário: carga, normalização e gravação ----
 
 function newInvId(){ return 'inv-' + Date.now() + Math.random().toString(36).slice(2,5); }
+function newReceiptId(){ return 'r-' + Date.now() + Math.random().toString(36).slice(2,6); }
 
 // Migração de esquema para um blob KV: em vez de ALTER TABLE, todo item passa
 // por aqui na leitura. Campo novo = uma linha a mais, e tudo que já foi
@@ -1536,7 +1637,14 @@ function normalizeItem(raw){
     minPrice: toCents(raw.minPrice),
     soldPrice: toCents(raw.soldPrice),
     buyer: raw.buyer || '',
+    paymentMethod: PAYMENT_METHODS.includes(raw.paymentMethod) ? raw.paymentMethod : '',
+    // Cada entrada é dinheiro que efetivamente caiu: {id, amount (centavos), at}
+    receipts: Array.isArray(raw.receipts)
+      ? raw.receipts.map(r => ({ id: r.id || newReceiptId(), amount: toCents(r.amount), at: isISODate(r.at) ? r.at : null }))
+                    .filter(r => r.amount != null)
+      : [],
     channel: raw.channel || '',
+    storyPostedAt: isISODateTime(raw.storyPostedAt) ? raw.storyPostedAt : null,
     listingUrl: raw.listingUrl || '',
     saleDate: raw.saleDate || null,
     resolvedAt: raw.resolvedAt || null,
@@ -1551,6 +1659,15 @@ function normalizeItem(raw){
 // caminho de um blob com data forjada injetar markup.
 function isISODate(v){
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+// new Date() é generoso demais para servir de validação: ele aceita
+// '"><img src=x onerror=...>' e devolve 1º/1/2001, garimpando o "1" do texto —
+// um story postado há 25 anos, que aparece como vencido sem nunca ter existido.
+function isISODateTime(v){
+  return typeof v === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?$/.test(v)
+    && isFinite(new Date(v).getTime());
 }
 
 function toCents(v){
@@ -1853,6 +1970,46 @@ function itemRisk(it){
   return null;
 }
 
+// Dinheiro que de fato entrou. Sem nenhum lançamento, um item vendido conta
+// como pago à vista — que é o que "Vendido" significava antes de existirem
+// lançamentos, e continua sendo o caso comum (PIX na hora, ninguém lança nada).
+function receivedOf(it){
+  if(it.destination !== 'Vender') return 0;
+  const r = it.receipts || [];
+  if(r.length) return r.reduce((a, x) => a + (x.amount || 0), 0);
+  return it.saleStatus === 'Vendido' ? (it.soldPrice || 0) : 0;
+}
+
+// Vendido mas ainda não pago. Só faz sentido para venda fechada: num item
+// apenas reservado o negócio ainda pode cair, e o preço dele segue contando
+// como "a vender", não como "a receber".
+function pendingOf(it){
+  if(it.destination !== 'Vender' || it.saleStatus !== 'Vendido') return 0;
+  return Math.max(0, (it.soldPrice || 0) - receivedOf(it));
+}
+
+function isStoryChannel(ch){ return /stor/i.test(ch || ''); }
+
+// null quando não há story; caso contrário horas desde a postagem.
+function storyAge(it){
+  if(!it.storyPostedAt || !isStoryChannel(it.channel)) return null;
+  if(!isISODateTime(it.storyPostedAt)) return null;
+  const t = new Date(it.storyPostedAt).getTime();
+  const hours = (Date.now() - t) / 3600000;
+  return { hours, expired: hours >= STORY_TTL_H };
+}
+
+function storyExpired(it){
+  const a = storyAge(it);
+  return !!(a && a.expired && !isResolved(it));
+}
+
+function fmtAge(hours){
+  if(hours < 1) return Math.max(1, Math.round(hours * 60)) + 'min';
+  if(hours < 48) return Math.floor(hours) + 'h';
+  return Math.floor(hours / 24) + 'd';
+}
+
 function invTotals(list){
   const sum = (arr, k) => arr.reduce((a, i) => a + (i[k] || 0), 0);
   const forSale = list.filter(i => i.destination === 'Vender');
@@ -1870,9 +2027,15 @@ function invTotals(list){
     // pedido o item conta como "sem preço", e exibir um piso para ele deixaria
     // o rodapé se contradizendo ("Pedido —" com um piso embaixo).
     floor: open.reduce((a,i)=> a + (i.askPrice == null ? 0 : (i.minPrice != null ? i.minPrice : i.askPrice)), 0),
-    received: sum(sold, 'soldPrice'),
+    // "Vendido" é o valor combinado; "recebido" é o que caiu na conta. Com
+    // venda parcelada os dois deixam de ser o mesmo número.
+    soldValue: sum(sold, 'soldPrice'),
+    received: forSale.reduce((a, i) => a + receivedOf(i), 0),
+    toReceive: forSale.reduce((a, i) => a + pendingOf(i), 0),
+    partial: sold.filter(i => pendingOf(i) > 0).length,
     unpriced: open.filter(i => i.askPrice == null).length,
     atRisk: list.filter(i => itemRisk(i)).length,
+    storyExpired: list.filter(storyExpired).length,
   };
 }
 
@@ -2583,7 +2746,7 @@ document.getElementById('manageCatBackdrop').addEventListener('click', (e)=>{
 // ================= INVENTÁRIO: renderização =================
 
 let invSort = { key:'title', dir:'asc' };
-const invFilters = { q:'', category:'', room:'', owner:'', destination:'', risk:false };
+const invFilters = { q:'', category:'', room:'', owner:'', destination:'', risk:false, storyOut:false };
 
 // "Sofa" acha "Sofá"; "geladeira" acha "Geladeira Brastemp".
 function norm(v){
@@ -2598,6 +2761,7 @@ function visibleItems(){
     (!invFilters.room        || it.room === invFilters.room) &&
     (!invFilters.owner       || it.owner === invFilters.owner) &&
     (!invFilters.risk        || !!itemRisk(it)) &&
+    (!invFilters.storyOut    || storyExpired(it)) &&
     (!q || norm(it.title).includes(q) || norm(it.notes).includes(q) || norm(it.buyer).includes(q))
   );
 }
@@ -2645,6 +2809,15 @@ function stageBadge(it){
   return `<button class="st-badge st-${i}" data-action="inv-stage" data-id="${escapeAttr(it.id)}"
     title="Clique avança, Alt+clique volta">${i === 4 ? '✓ ' : ''}${escapeHtml(it.saleStatus)}</button>`;
 }
+function storyBadge(it){
+  const a = storyAge(it);
+  if(!a) return '';
+  if(a.expired) return `<span class="risk-badge story-out" data-action="inv-repost" data-id="${escapeAttr(it.id)}"
+    title="O story venceu e não está mais no ar. Clique depois de repostar para zerar o contador.">📸 venceu</span>`;
+  return `<span class="risk-badge story-on" data-action="inv-repost" data-id="${escapeAttr(it.id)}"
+    title="Story no ar. Clique depois de repostar para zerar o contador.">📸 ${escapeHtml(fmtAge(a.hours))}</span>`;
+}
+
 function riskBadge(it){
   const r = itemRisk(it);
   const label = it.deadline ? escapeHtml(fmtDate(it.deadline)) : '';
@@ -2679,10 +2852,10 @@ function invRowHtml(it){
     <td class="c-name">
       <span class="inv-name">${escapeHtml(it.title)}</span>
       <span class="inv-sub">${it.category ? `<i class="cat-dot" style="background:${colorForCategory(it.category)}"></i>${escapeHtml(it.category)}` : ''}${it.room ? ` · ${escapeHtml(it.room)}` : ''}</span>
-      <span class="sm-only">${destBadge(it)}${sells ? stageBadge(it) : ''}${riskBadge(it)}</span>
+      <span class="sm-only">${destBadge(it)}${sells ? stageBadge(it) + storyBadge(it) : ''}${riskBadge(it)}</span>
     </td>
     <td class="c-dest">${destBadge(it)}</td>
-    <td class="c-status">${sells ? stageBadge(it) : NA}</td>
+    <td class="c-status">${sells ? stageBadge(it) + storyBadge(it) : NA}</td>
     <td class="c-owner"><span class="who" title="${escapeAttr(it.owner)}">${escapeHtml(ownerShort(it.owner))}</span></td>
     <td class="c-prazo">${riskBadge(it) || NA}</td>
     <td class="c-ask money">${sells
@@ -2691,7 +2864,9 @@ function invRowHtml(it){
       : NA}</td>
     <td class="c-sold money">${sells && it.saleStatus === 'Vendido'
       ? `<span class="m-sold">${it.soldPrice == null ? NA : fmtMoneyPlain(it.soldPrice)}</span>${
-          it.buyer ? `<span class="m-buyer">${escapeHtml(it.buyer)}</span>` : ''}`
+          pendingOf(it) > 0
+            ? `<span class="m-pending" title="Já recebido: ${escapeAttr(fmtMoney(receivedOf(it)))}">falta ${fmtMoneyPlain(pendingOf(it))}</span>`
+            : it.buyer ? `<span class="m-buyer">${escapeHtml(it.buyer)}</span>` : ''}`
       : NA}</td>
     <td class="c-act">
       <button data-action="inv-edit" data-id="${escapeAttr(it.id)}" title="Editar">✎</button>
@@ -2734,8 +2909,20 @@ function invDetailHtml(it){
         ${it.saleDate ? dtCell('Vendido em', fmtDate(it.saleDate)) : ''}
         ${it.buyer ? dtCell('Comprador', it.buyer) : ''}
         ${it.minPrice != null && sells ? dtCell('Piso 🔒', fmtMoney(it.minPrice)) : ''}
+        ${sells && it.saleStatus === 'Vendido' ? dtCell('Forma de pagamento', it.paymentMethod || 'não informada') : ''}
+        ${sells && it.saleStatus === 'Vendido'
+          ? dtCell('Recebido', pendingOf(it) > 0
+              ? `${fmtMoney(receivedOf(it))} de ${fmtMoney(it.soldPrice)} · falta ${fmtMoney(pendingOf(it))}`
+              : `${fmtMoney(receivedOf(it))} · quitado`)
+          : ''}
+        ${storyAge(it) ? dtCell('Story', (storyAge(it).expired
+              ? 'venceu há ' + fmtAge(storyAge(it).hours - STORY_TTL_H)
+              : 'no ar há ' + fmtAge(storyAge(it).hours)) + ' · postado ' + fmtDateTime(it.storyPostedAt)) : ''}
         ${dtCell('Observações', it.notes, null, 'wide')}
       </div>
+      ${(it.receipts || []).length ? `<div class="dt-receipts">
+        ${it.receipts.map(r => `<span class="dt-receipt">${escapeHtml(fmtMoney(r.amount))}<i>${r.at ? escapeHtml(fmtDateBR(r.at)) : ''}</i></span>`).join('')}
+      </div>` : ''}
       ${!sells && it.destination !== 'A decidir' ? `
       <label class="dt-resolve">
         <input type="checkbox" data-action="inv-resolve" data-id="${escapeAttr(it.id)}" ${it.resolvedAt ? 'checked' : ''}>
@@ -2760,6 +2947,7 @@ function invDetailHtml(it){
       <div class="dt-actions">
         <button class="add-btn ghost" data-action="inv-edit" data-id="${escapeAttr(it.id)}">✎ Editar</button>
         ${sells ? `<button class="add-btn ghost" data-action="inv-ad" data-id="${escapeAttr(it.id)}">📋 Anúncio</button>` : ''}
+        ${sells && isStoryChannel(it.channel) ? `<button class="add-btn ghost" data-action="inv-repost" data-id="${escapeAttr(it.id)}">📸 Repostei agora</button>` : ''}
         <button class="add-btn ghost danger" data-action="inv-delete" data-id="${escapeAttr(it.id)}">🗑 Excluir</button>
       </div>
     </td>
@@ -2789,12 +2977,17 @@ function renderInvTotals(list){
   if(t.forSale) parts.push(`<b>${t.forSale}</b> à venda`);
   if(t.sold) parts.push(`<b>${t.sold}</b> vendidos`);
   if(t.unpriced) parts.push(`<span class="warn">⚠ ${t.unpriced} sem preço</span>`);
+  if(t.storyExpired) parts.push(`<span class="warn">📸 ${t.storyExpired} story vencido${t.storyExpired > 1 ? 's' : ''}</span>`);
   document.getElementById('invFootLeft').innerHTML = invSaveFailed
     ? '<span class="warn">⚠ Não deu para salvar — verifique a conexão e recarregue a página</span>'
     : parts.join(' · ');
   document.getElementById('invFootAsk').textContent = t.asked ? fmtMoney(t.asked) : '—';
   document.getElementById('invFootFloor').textContent = t.floor ? '🔒 piso ' + fmtMoney(t.floor) : '';
   document.getElementById('invFootRecv').textContent = t.received ? fmtMoney(t.received) : '—';
+  // Vendido mas ainda não pago: sem isso a venda parcelada desaparece da tela,
+  // porque o item já saiu de "a vender" e o dinheiro ainda não entrou todo.
+  document.getElementById('invFootPending').textContent =
+    t.toReceive ? `a receber ${fmtMoney(t.toReceive)}` + (t.partial ? ` (${t.partial} parcelad${t.partial > 1 ? 'as' : 'a'})` : '') : '';
 }
 
 function renderInvChips(){
@@ -2815,6 +3008,15 @@ function renderInvChips(){
   chip.dataset.risk = '1';
   chip.innerHTML = `⚠ Em risco <span class="n"><b>${risky}</b></span>`;
   el.appendChild(chip);
+
+  const outN = invItems.filter(storyExpired).length;
+  if(outN || invFilters.storyOut){
+    const sc = document.createElement('div');
+    sc.className = 'inv-chip' + (invFilters.storyOut ? ' active' : '');
+    sc.dataset.storyOut = '1';
+    sc.innerHTML = `📸 Story vencido <span class="n"><b>${outN}</b></span>`;
+    el.appendChild(sc);
+  }
 }
 
 function destColor(cls){
@@ -2900,6 +3102,7 @@ document.getElementById('invSearch').addEventListener('input', (e)=>{
 document.getElementById('invClearFilters').addEventListener('click', ()=>{
   invFilters.q = invFilters.category = invFilters.room = invFilters.owner = invFilters.destination = '';
   invFilters.risk = false;
+  invFilters.storyOut = false;
   document.getElementById('invSearch').value = '';
   ['invFilterCategory','invFilterRoom','invFilterOwner'].forEach(id=> document.getElementById(id).value = '');
   render();
@@ -2907,7 +3110,9 @@ document.getElementById('invClearFilters').addEventListener('click', ()=>{
 document.getElementById('invChips').addEventListener('click', (e)=>{
   const chip = e.target.closest('.inv-chip');
   if(!chip) return;
-  if(chip.dataset.risk){
+  if(chip.dataset.storyOut){
+    invFilters.storyOut = !invFilters.storyOut;
+  } else if(chip.dataset.risk){
     invFilters.risk = !invFilters.risk;
   } else {
     invFilters.destination = invFilters.destination === chip.dataset.dest ? '' : chip.dataset.dest;
@@ -2956,7 +3161,14 @@ document.addEventListener('click', async (e)=>{
 
   let refocus = null;
   let photoToDrop = null;
-  if(action === 'inv-stage'){
+  if(action === 'inv-repost'){
+    // Zera o contador do story. Repostar acontece no Instagram; aqui só se
+    // registra quando, para o "há quanto tempo" voltar a fazer sentido.
+    it.storyPostedAt = new Date().toISOString();
+    if(!isStoryChannel(it.channel)) it.channel = 'Stories do Instagram';
+    stampEdit(it);
+    toast('Story marcado como repostado agora');
+  } else if(action === 'inv-stage'){
     const i = SALE_STAGES.indexOf(it.saleStatus);
     const target = SALE_STAGES[Math.min(Math.max(i + (e.altKey ? -1 : 1), 0), SALE_STAGES.length - 1)];
     // Vendido é o momento em que preço realizado, comprador e data existem —
@@ -3026,6 +3238,97 @@ let previewBlobUrl = null;
 // desse item apagar a foto dele.
 let modalGeneration = 0;
 
+// Editor de recebimentos: mesma mecânica do editor de checklist — cópia
+// profunda enquanto o modal está aberto, comprometida só no Salvar.
+function renderReceiptEditor(){
+  const list = document.getElementById('iReceiptList');
+  list.innerHTML = editingReceipts.length ? '' : '<p class="rc-empty">Nada recebido ainda.</p>';
+  editingReceipts.forEach((r, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'rc-row';
+    row.innerHTML = `
+      <span class="rc-amount">${escapeHtml(fmtMoney(r.amount))}</span>
+      <span class="rc-date">${r.at ? escapeHtml(fmtDateBR(r.at)) : '—'}</span>
+      <button type="button" class="rc-remove" data-idx="${idx}" title="Remover">✕</button>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.rc-remove').forEach(b=> b.addEventListener('click', (e)=>{
+    editingReceipts.splice(parseInt(e.target.dataset.idx), 1);
+    renderReceiptEditor();
+  }));
+  updateReceiptTotal();
+}
+
+function updateReceiptTotal(){
+  const el = document.getElementById('iReceiptTotal');
+  const total = editingReceipts.reduce((a,r)=> a + (r.amount || 0), 0);
+  const sold = parseMoney(document.getElementById('iSold').value);
+  if(!editingReceipts.length && sold == null){ el.textContent = ''; el.className = 'rc-total'; return; }
+  if(!editingReceipts.length){
+    // Sem lançamento nenhum, o item vendido conta como pago à vista.
+    el.textContent = `Sem lançamentos — conta como recebido à vista (${fmtMoney(sold)}).`;
+    el.className = 'rc-total';
+    return;
+  }
+  if(sold == null){ el.textContent = `Recebido ${fmtMoney(total)}.`; el.className = 'rc-total'; return; }
+  const falta = sold - total;
+  el.textContent = falta > 0
+    ? `Recebido ${fmtMoney(total)} de ${fmtMoney(sold)} · falta ${fmtMoney(falta)}`
+    : falta < 0
+      ? `Recebido ${fmtMoney(total)} — ${fmtMoney(-falta)} acima do preço vendido`
+      : `Recebido ${fmtMoney(total)} — quitado ✓`;
+  el.className = 'rc-total' + (falta > 0 ? ' pending' : falta < 0 ? ' over' : ' done');
+}
+
+document.getElementById('rcAddBtn').addEventListener('click', ()=>{
+  const amountEl = document.getElementById('rcAmount');
+  const dateEl = document.getElementById('rcDate');
+  const amount = parseMoney(amountEl.value);
+  if(amount == null || amount === 0){ amountEl.focus(); return; }
+  editingReceipts.push({ id: newReceiptId(), amount, at: dateEl.value || todayISO() });
+  editingReceipts.sort((a,b)=> String(a.at).localeCompare(String(b.at)));
+  amountEl.value = '';
+  dateEl.value = '';
+  renderReceiptEditor();
+  amountEl.focus();
+});
+document.getElementById('rcAmount').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('rcAddBtn').click(); }
+});
+document.getElementById('iSold').addEventListener('blur', updateReceiptTotal);
+
+// ---- Story do Instagram ----
+function localDateTimeValue(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(!isFinite(d.getTime())) return '';
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function syncStoryField(){
+  const ch = document.getElementById('iChannel').value;
+  const field = document.getElementById('iStoryField');
+  const on = isStoryChannel(ch);
+  field.classList.toggle('off', !on);
+  if(!on) return;
+  const v = document.getElementById('iStoryPostedAt').value;
+  const hint = document.getElementById('iStoryHint');
+  if(!v){ hint.textContent = 'Story sai do ar 24h depois de postado.'; hint.className = 'hint-priv'; return; }
+  const hours = (Date.now() - new Date(v).getTime()) / 3600000;
+  hint.textContent = hours >= STORY_TTL_H
+    ? `Venceu há ${fmtAge(hours - STORY_TTL_H)} — não está mais no ar.`
+    : `No ar há ${fmtAge(hours)} · sai em ${fmtAge(STORY_TTL_H - hours)}.`;
+  hint.className = 'hint-priv' + (hours >= STORY_TTL_H ? ' expired' : '');
+}
+document.getElementById('iChannel').addEventListener('input', syncStoryField);
+document.getElementById('iStoryPostedAt').addEventListener('change', syncStoryField);
+document.getElementById('iStoryNow').addEventListener('click', ()=>{
+  document.getElementById('iStoryPostedAt').value = localDateTimeValue(new Date().toISOString());
+  syncStoryField();
+});
+
 function openInvModal(it, opts){
   opts = opts || {};
   modalGeneration++;
@@ -3035,6 +3338,7 @@ function openInvModal(it, opts){
   editingPhotoScrap = [];
 
   populateInvSelects();
+  fillSelect(document.getElementById('iPaymentMethod'), PAYMENT_METHODS, '— não informado —');
   document.getElementById('invModalTitle').textContent = it ? 'Editar item' : 'Novo item';
   document.getElementById('iTitle').value = it ? it.title : '';
   document.getElementById('iCategory').value = it ? it.category : invCategories[0];
@@ -3051,19 +3355,27 @@ function openInvModal(it, opts){
   document.getElementById('iChannel').value = it ? it.channel : '';
   document.getElementById('iListingUrl').value = it ? it.listingUrl : '';
   document.getElementById('iSaleDate').value = it ? (it.saleDate || '') : '';
+  document.getElementById('iPaymentMethod').value = it ? (it.paymentMethod || '') : '';
+  document.getElementById('iStoryPostedAt').value = it ? localDateTimeValue(it.storyPostedAt) : '';
   document.getElementById('iNotes').value = it ? it.notes : '';
+  editingReceipts = it && it.receipts ? JSON.parse(JSON.stringify(it.receipts)) : [];
+  document.getElementById('rcAmount').value = '';
+  document.getElementById('rcDate').value = '';
   if(opts.stage === 'Vendido') document.getElementById('iDestination').value = 'Vender';
 
   document.getElementById('iPhotoFile').value = '';
   setPhotoPreview(editingPhoto);
   setPhotoState('');
+  renderReceiptEditor();
   syncCondFields();
+  syncStoryField();
   document.getElementById('invModalBackdrop').classList.add('open');
   if(opts.stage === 'Vendido') setTimeout(()=> document.getElementById('iSold').focus(), 60);
 }
 
 function closeInvModal(committed){
   modalGeneration++;   // invalida qualquer upload ainda em vôo
+  editingReceipts = [];
   settlePhotos(committed);
   document.getElementById('invModalBackdrop').classList.remove('open');
   editingInvId = null;
@@ -3117,6 +3429,10 @@ document.getElementById('iSave').addEventListener('click', async ()=>{
     channel: document.getElementById('iChannel').value.trim(),
     listingUrl: document.getElementById('iListingUrl').value.trim(),
     saleDate: document.getElementById('iSaleDate').value || null,
+    paymentMethod: document.getElementById('iPaymentMethod').value,
+    receipts: editingReceipts.filter(r => r.amount != null && r.amount !== 0),
+    storyPostedAt: document.getElementById('iStoryPostedAt').value
+      ? new Date(document.getElementById('iStoryPostedAt').value).toISOString() : null,
     notes: document.getElementById('iNotes').value.trim(),
     photo: editingPhoto,
   };

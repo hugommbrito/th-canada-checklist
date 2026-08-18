@@ -88,6 +88,36 @@ valor, observações e o prazo. Fora de HTTPS (por exemplo, abrindo pelo IP na r
 o navegador não expõe a API de área de transferência; nesse caso o texto aparece já
 selecionado para copiar à mão.
 
+### Vendido não é a mesma coisa que recebido
+
+Venda de mudança é parcelada com frequência ("te dou 500 agora e o resto quando
+receber"), então o item guarda duas coisas diferentes: o **preço vendido**, que é o
+combinado, e os **recebimentos**, que é o dinheiro que efetivamente caiu. Cada
+recebimento tem valor e data, lançados livremente — três parcelas iguais e "500 agora,
+1.350 depois" são o mesmo mecanismo.
+
+Item vendido **sem nenhum lançamento conta como pago à vista**. É o caso mais comum (PIX
+na hora, ninguém vai lançar nada) e também o que "Vendido" significava antes de existirem
+recebimentos, então nada precisou ser migrado.
+
+O sinal de um item apenas reservado também conta como dinheiro em mãos — o que entrou,
+entrou. Mas ele não vira "a receber": enquanto a venda não fecha o negócio ainda pode
+cair, e o preço do item segue contando como *a vender*.
+
+Junto vem a **forma de pagamento** (PIX, dinheiro, transferência, cartão), que serve para
+lembrar por onde o dinheiro vem quando a parcela atrasa.
+
+### Anúncio em stories do Instagram
+
+Story sai do ar 24h depois de postado, e um item "Anunciado" com o story vencido não está
+sendo mostrado para ninguém — o status mente sem que nada na tela avise. Por isso, quando
+o canal é um story, o item guarda o horário da postagem e a tabela mostra há quanto tempo:
+`📸 19h` enquanto está no ar, `📸 venceu` depois disso. O contador de stories vencidos
+aparece no rodapé e tem chip próprio para filtrar.
+
+O badge é clicável: repostar acontece no Instagram, e um toque aqui zera o contador. Fica
+separado de "Em risco", que é sobre prazo — são dois problemas diferentes.
+
 ### Os números
 
 A faixa do topo mostra o quadro **global** — itens resolvidos, a receber, recebido e em
@@ -98,6 +128,10 @@ diz quanto a sala vale. Sem filtro os dois coincidem.
 do preço pedido faria a conta ingênua dizer que sobrou menos do que realmente sobra. E
 `⚠ N sem preço` existe para avisar que o total está subestimado — sem isso ele mentiria
 por omissão.
+
+"Recebido" é dinheiro em mãos, nunca o valor combinado. O que foi vendido e ainda não foi
+pago aparece como um número próprio no rodapé, e não no topo: somar parcela futura ao
+"Recebido" seria contar dinheiro que ainda não existe.
 
 Preços são guardados em centavos inteiros. O campo aceita `1200`, `1.200`, `1200,50` ou
 `R$ 1.200,50`, e normaliza ao sair do campo: quem digita `1200` vê `1.200,00` antes de
