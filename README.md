@@ -11,11 +11,16 @@ Express bem pequeno.
 
 - **Front-end:** `public/index.html` — single-file HTML/CSS/JS vanilla, reaproveitado
   quase integralmente do protótipo original.
+- **Regras de negócio:** `public/domain.js` — o que dá sentido aos números (o que conta
+  como "recebido", por que "a receber" não é `pedido − recebido`, quando um story do
+  Instagram saiu do ar) mora num arquivo só, carregado pelo navegador via `<script src>`
+  e pelo servidor via `require()`. Sem build step: é o mesmo arquivo nos dois lados,
+  justamente para a tela e a API nunca contarem histórias diferentes.
 - **Back-end:** `server.js` — Express servindo o front estático + uma API mínima
   (`GET/PUT /api/kv/:key`) que espelha o contrato antigo do `window.storage.get/set`,
-  mais `POST/DELETE /api/upload` para as fotos do inventário. O upload recebe os bytes
-  crus da imagem no corpo (o cliente já reduziu no canvas), o que dispensa multipart e
-  qualquer dependência nova.
+  mais `POST/DELETE /api/upload` para as fotos do inventário e `GET /api/snapshot`.
+  O upload recebe os bytes crus da imagem no corpo (o cliente já reduziu no canvas), o
+  que dispensa multipart e qualquer dependência nova.
 - **Persistência:** SQLite (`better-sqlite3`), uma tabela `kv_store` (key/value), sem
   ORM nem schema relacional — troca 1:1 do storage anterior, sem refactor de modelo de
   dados.
@@ -172,6 +177,31 @@ desfaria a exclusão para os dois, porque a gravação seguinte regravaria o ite
 Voltar para a aba também recarrega (sem polling): no celular isso acontece a cada
 desbloqueio, que é o ritmo da triagem. O que estava em digitação nos últimos instantes é
 gravado antes da recarga, não depende de sorte.
+
+## Snapshot para automação
+
+`GET /api/snapshot` devolve todo o estado do painel em JSON, formatado para ser
+consumido por um agente: ordenado por `id` (estável entre chamadas, então dá para
+diferenciar duas coletas), datado, com `hoje` calculado em `America/Sao_Paulo`
+(`SNAPSHOT_TZ`), e com os números **já calculados** — quem consome não deveria ter que
+reimplementar o que "recebido" significa.
+
+Dinheiro vem sempre como `{ "cents": 120000, "brl": "R$ 1.200,00" }`: o inteiro para
+comparar, a string para escrever, e nenhuma divisão por 100 na mão. Os alertas já vêm
+como listas de id (`semPreco`, `prazoEstourado`, `prazoDepoisDaMudanca`, `storyVencido`,
+`vendasParceladas`).
+
+`?since=<ISO>` acrescenta os ids editados depois daquele instante. É conveniência, não
+verdade: baseia-se em `lastEditedAt`, então não enxerga exclusão. Para saber o que mudou
+de fato, compare dois snapshots por `id`.
+
+Se `SNAPSHOT_TOKEN` estiver definido, a rota passa a exigir `?token=` ou o header
+`X-Snapshot-Token`. Sem a variável ela fica tão aberta quanto o resto do painel —
+vale definir antes de entregar a URL a um agendador.
+
+O uso pensado está em `HANDOFF-COWORK.md`: um schedule diário às 12h que compara com a
+coleta anterior, resume o que foi feito, mostra o panorama e sugere o que fazer até o dia
+seguinte.
 
 ## Ordem manual e drag and drop
 
