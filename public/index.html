@@ -831,6 +831,15 @@
     font-size:13px;line-height:1;padding:2px 3px;transition:transform .12s ease;
   }
   .inv-exp.open{transform:rotate(90deg);color:var(--ink);}
+  /* O wrapper é quem recebe o clique, para o contador também abrir a galeria. */
+  .thumb-wrap{position:relative;display:inline-block;line-height:0;cursor:zoom-in;}
+  .thumb-count{
+    position:absolute;right:-3px;bottom:-3px;
+    min-width:14px;padding:0 3px;border-radius:7px;
+    background:var(--navy-900);color:var(--paper);border:1px solid var(--paper);
+    font-family:'IBM Plex Mono',monospace;font-size:8.5px;font-weight:600;
+    line-height:13px;text-align:center;
+  }
   .inv-thumb{
     width:34px;height:34px;border-radius:6px;object-fit:cover;display:block;
     background:var(--paper-dim);cursor:zoom-in;
@@ -947,9 +956,38 @@
   }
   .sale-block.off{display:none;}
   .hint-priv{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8a5c14;margin-top:3px;}
-  .photo-row{display:flex;align-items:center;gap:12px;}
-  .photo-prev{width:96px;height:96px;border-radius:8px;object-fit:cover;background:var(--paper-dim);flex-shrink:0;}
-  .photo-prev.off{display:none;}
+  .photo-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;}
+  .photo-grid:empty{display:none;}
+  .ph-tile{position:relative;width:88px;height:88px;flex-shrink:0;}
+  .ph-tile img{
+    width:100%;height:100%;border-radius:8px;object-fit:cover;
+    background:var(--paper-dim);display:block;cursor:zoom-in;
+  }
+  /* Enquanto sobe, a miniatura já aparece — vinda do arquivo local, apagada,
+     para ficar claro que ainda não é uma foto do item. */
+  .ph-tile.pending img{opacity:.45;cursor:default;}
+  .ph-tile.pending::after{
+    content:'↑';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:22px;color:var(--ink);
+  }
+  /* Dentro da miniatura, não em cima da borda: com as fotos lado a lado, um
+     botão pendurado para fora encosta no da vizinha e fica ambíguo de quem é. */
+  .ph-tile button{
+    position:absolute;width:22px;height:22px;padding:0;border-radius:50%;
+    border:1px solid rgba(0,0,0,0.15);background:rgba(246,241,228,0.94);color:var(--ink);
+    font-size:11px;line-height:1;cursor:pointer;
+    box-shadow:0 1px 3px rgba(0,0,0,0.35);
+  }
+  .ph-tile button:hover{background:#fff;}
+  .ph-del{top:4px;right:4px;}
+  .ph-star{top:4px;left:4px;color:var(--amber-dim);}
+  .ph-cover{
+    position:absolute;left:0;bottom:0;right:0;
+    background:rgba(14,24,48,0.72);color:var(--paper);
+    border-radius:0 0 8px 8px;text-align:center;
+    font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.1em;
+    text-transform:uppercase;padding:2px 0;
+  }
   .photo-state{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);}
   .photo-state.error{color:var(--coral);}
   .photo-btns{display:flex;flex-direction:column;gap:6px;align-items:flex-start;}
@@ -1040,8 +1078,32 @@
     opacity:0;pointer-events:none;transition:opacity .18s ease;
   }
   .inv-toast.show{opacity:1;}
-  #photoBackdrop .modal{background:none;padding:0;max-width:min(92vw,900px);}
-  #photoBackdrop img{width:100%;height:auto;border-radius:12px;display:block;}
+  #photoBackdrop .modal{
+    background:none;padding:0;width:auto;max-width:min(92vw,900px);
+    position:relative;overflow:visible;
+  }
+  #photoBig{display:block;max-width:100%;max-height:86vh;border-radius:12px;}
+  .ph-nav{
+    position:absolute;top:50%;transform:translateY(-50%);
+    width:42px;height:42px;border-radius:50%;
+    border:1px solid rgba(246,241,228,0.35);background:rgba(14,24,48,0.72);
+    color:var(--paper);font-size:24px;line-height:1;cursor:pointer;
+  }
+  .ph-nav:hover{background:var(--navy-800);}
+  .ph-nav.prev{left:-10px;} .ph-nav.next{right:-10px;}
+  .ph-nav.off{display:none;}
+  .ph-close{
+    position:absolute;top:-14px;right:-14px;
+    width:34px;height:34px;border-radius:50%;
+    border:1px solid rgba(246,241,228,0.35);background:var(--navy-900);
+    color:var(--paper);font-size:15px;line-height:1;cursor:pointer;
+  }
+  .ph-counter{
+    position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+    background:rgba(14,24,48,0.75);color:var(--paper);border-radius:20px;
+    padding:3px 10px;font-family:'IBM Plex Mono',monospace;font-size:11px;
+  }
+  .ph-counter:empty{display:none;}
   #adText{
     width:100%;min-height:200px;padding:10px;border-radius:8px;border:1px solid #d8cfb6;
     font-family:'Inter',sans-serif;font-size:13px;line-height:1.5;background:#fff;color:var(--ink);
@@ -1361,14 +1423,12 @@
     </div>
 
     <div class="field">
-      <label>Foto</label>
-      <div class="photo-row">
-        <img class="photo-prev off" id="iPhotoPrev" alt="">
-        <div class="photo-btns">
-          <input type="file" id="iPhotoFile" accept="image/*">
-          <button type="button" class="btn-secondary" id="iPhotoRemove" style="padding:5px 10px;font-size:12px;">Remover foto</button>
-          <span class="photo-state" id="iPhotoState"></span>
-        </div>
+      <label>Fotos</label>
+      <div class="photo-grid" id="iPhotoGrid"></div>
+      <div class="photo-btns">
+        <input type="file" id="iPhotoFile" accept="image/*" multiple>
+        <span class="photo-state" id="iPhotoHint"></span>
+        <span class="photo-state" id="iPhotoState"></span>
       </div>
     </div>
 
@@ -1514,7 +1574,13 @@
 </div>
 
 <div class="modal-backdrop" id="photoBackdrop">
-  <div class="modal"><img id="photoBig" alt=""></div>
+  <div class="modal">
+    <img id="photoBig" alt="">
+    <button type="button" class="ph-nav prev" id="photoPrev" title="Anterior (←)">‹</button>
+    <button type="button" class="ph-nav next" id="photoNext" title="Próxima (→)">›</button>
+    <button type="button" class="ph-close" id="photoClose" title="Fechar (Esc)">✕</button>
+    <span class="ph-counter" id="photoCount"></span>
+  </div>
 </div>
 
 <div class="inv-toast" id="toast" role="status" aria-live="polite"></div>
@@ -1536,7 +1602,7 @@ const INV_CATS_KEY = 'toronto-tracker-inv-categories';
 // estão lá junto das funções que dependem deles.
 const {
   DESTINATIONS, SALE_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
-  DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H,
+  DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS,
   daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
   newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
   fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem,
@@ -2663,14 +2729,20 @@ function riskBadge(it){
 function ownerShort(o){
   return o === 'Ambos' ? 'H+T' : (o || '').slice(0,1);
 }
-// src só aceita caminho do nosso próprio /uploads — fecha javascript:/data:
+// A tabela mostra só a capa (a primeira foto); o contador diz que há mais, e o
+// clique abre a galeria. O src é caminho do nosso /uploads porque normalizePhotos
+// já rejeitou qualquer outra coisa — é o que fecha javascript:/data: aqui.
 function thumbHtml(it){
-  const ok = typeof it.photo === 'string' && /^\/uploads\/[\w.\-]+$/.test(it.photo);
-  return ok
-    ? `<img class="inv-thumb" src="${escapeAttr(it.photo)}" alt="" loading="lazy" decoding="async"
-         width="34" height="34" data-action="inv-zoom" data-id="${escapeAttr(it.id)}"
-         onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'inv-thumb no-photo',textContent:'🖼'}))">`
-    : `<span class="inv-thumb no-photo" title="Sem foto">🖼</span>`;
+  const ph = it.photos || [];
+  if(!ph.length) return `<span class="inv-thumb no-photo" title="Sem foto">🖼</span>`;
+  const n = ph.length;
+  return `<span class="thumb-wrap" data-action="inv-zoom" data-id="${escapeAttr(it.id)}"
+       title="${n > 1 ? n + ' fotos' : 'Ver foto'}">
+    <img class="inv-thumb" src="${escapeAttr(ph[0])}" alt="" loading="lazy" decoding="async"
+         width="34" height="34"
+         onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'inv-thumb no-photo',textContent:'🖼'}))">
+    ${n > 1 ? `<span class="thumb-count">${n}</span>` : ''}
+  </span>`;
 }
 
 function invRowHtml(it){
@@ -2983,14 +3055,10 @@ document.addEventListener('click', async (e)=>{
   }
   if(action === 'inv-edit'){ openInvModal(it); return; }
   if(action === 'inv-ad'){ openAdModal(it); return; }
-  if(action === 'inv-zoom'){
-    document.getElementById('photoBig').src = it.photo;
-    document.getElementById('photoBackdrop').classList.add('open');
-    return;
-  }
+  if(action === 'inv-zoom'){ openLightbox(it.photos, 0); return; }
 
   let refocus = null;
-  let photoToDrop = null;
+  let photosToDrop = [];
   if(action === 'inv-repost'){
     // Zera o contador do story. Repostar acontece no Instagram; aqui só se
     // registra quando, para o "há quanto tempo" voltar a fazer sentido.
@@ -3025,7 +3093,7 @@ document.addEventListener('click', async (e)=>{
     invItems = invItems.filter(x => x.id !== id);
     openPanels.delete('inv-' + id);
     commentDrafts.delete(id);
-    photoToDrop = it.photo;   // apagado só depois de a exclusão ir para o banco
+    photosToDrop = it.photos;   // apagadas só depois de a exclusão ir para o banco
   } else if(action === 'inv-del-comment'){
     if(!confirm('Excluir este comentário?')) return;
     it.comments = (it.comments || []).filter(c => c.id !== el.dataset.comment);
@@ -3034,9 +3102,9 @@ document.addEventListener('click', async (e)=>{
     return;
   }
   const gravou = await saveInventory();
-  // Falhou a gravação: o item continua no banco, então a foto dele também tem
-  // que continuar existindo.
-  if(gravou && photoToDrop) deletePhotoFile(photoToDrop);
+  // Falhou a gravação: o item continua no banco, então as fotos dele também
+  // têm que continuar existindo.
+  if(gravou) photosToDrop.forEach(deletePhotoFile);
   render();
   if(refocus){
     const box = document.getElementById(refocus);
@@ -3054,15 +3122,58 @@ document.addEventListener('change', async (e)=>{
   render();
 });
 
-document.getElementById('photoBackdrop').addEventListener('click', ()=>{
+// ---- Galeria (lightbox) ----
+// Recebe a lista pronta, não o item: serve tanto para a miniatura da tabela
+// quanto para as fotos ainda não salvas dentro do modal de edição.
+let lightbox = { list: [], i: 0 };
+
+function openLightbox(list, i){
+  const photos = (list || []).slice();
+  if(!photos.length) return;
+  lightbox = { list: photos, i: i || 0 };
+  paintLightbox();
+  document.getElementById('photoBackdrop').classList.add('open');
+}
+function paintLightbox(){
+  const n = lightbox.list.length;
+  if(!n) return closeLightbox();
+  lightbox.i = ((lightbox.i % n) + n) % n;   // circula nas duas direções
+  document.getElementById('photoBig').src = lightbox.list[lightbox.i];
+  document.getElementById('photoCount').textContent = n > 1 ? `${lightbox.i + 1}/${n}` : '';
+  document.getElementById('photoPrev').classList.toggle('off', n < 2);
+  document.getElementById('photoNext').classList.toggle('off', n < 2);
+}
+function stepLightbox(d){ lightbox.i += d; paintLightbox(); }
+function closeLightbox(){
   document.getElementById('photoBackdrop').classList.remove('open');
+  lightbox = { list: [], i: 0 };
+}
+function lightboxOpen(){
+  return document.getElementById('photoBackdrop').classList.contains('open');
+}
+
+// Clique na própria foto não fecha mais: com várias, fechar sem querer no meio
+// da navegação é o erro fácil. Fecha no fundo, no ✕ e no Esc.
+document.getElementById('photoBackdrop').addEventListener('click', (e)=>{
+  if(e.target.id === 'photoBackdrop') closeLightbox();
+});
+document.getElementById('photoClose').addEventListener('click', closeLightbox);
+document.getElementById('photoPrev').addEventListener('click', ()=> stepLightbox(-1));
+document.getElementById('photoNext').addEventListener('click', ()=> stepLightbox(1));
+document.addEventListener('keydown', (e)=>{
+  if(!lightboxOpen()) return;
+  if(e.key === 'Escape'){ closeLightbox(); return; }
+  if(e.key === 'ArrowLeft'){ e.preventDefault(); stepLightbox(-1); }
+  if(e.key === 'ArrowRight'){ e.preventDefault(); stepLightbox(1); }
 });
 
 // ---- Modal do item ----
-let editingPhoto = null;
-let editingPhotoOriginal = null;
+let editingPhotos = [];
+let editingPhotosOriginal = [];
 let editingPhotoScrap = [];
-let previewBlobUrl = null;
+// Fotos escolhidas e ainda subindo: {file, url} com url de blob local, só para
+// a miniatura aparecer antes de o upload terminar.
+let pendingPhotos = [];
 // Cada abertura do modal ganha um número. Um upload lento que termina depois
 // de fechar não pode pintar a foto no item seguinte — e, pior, fazer o save
 // desse item apagar a foto dele.
@@ -3163,9 +3274,10 @@ function openInvModal(it, opts){
   opts = opts || {};
   modalGeneration++;
   editingInvId = it ? it.id : null;
-  editingPhoto = it ? it.photo : null;
-  editingPhotoOriginal = editingPhoto;
+  editingPhotos = it ? it.photos.slice() : [];
+  editingPhotosOriginal = editingPhotos.slice();
   editingPhotoScrap = [];
+  dropPendingPhotos();
 
   populateInvSelects();
   fillSelect(document.getElementById('iPaymentMethod'), PAYMENT_METHODS, '— não informado —');
@@ -3194,7 +3306,7 @@ function openInvModal(it, opts){
   if(opts.stage === 'Vendido') document.getElementById('iDestination').value = 'Vender';
 
   document.getElementById('iPhotoFile').value = '';
-  setPhotoPreview(editingPhoto);
+  renderPhotoGrid();
   setPhotoState('');
   renderReceiptEditor();
   syncCondFields();
@@ -3209,7 +3321,7 @@ function closeInvModal(committed){
   settlePhotos(committed);
   document.getElementById('invModalBackdrop').classList.remove('open');
   editingInvId = null;
-  if(previewBlobUrl){ URL.revokeObjectURL(previewBlobUrl); previewBlobUrl = null; }
+  dropPendingPhotos();
 }
 
 // Doar/Descartar/Levar não têm preço nem pipeline; o bloco some inteiro, mas os
@@ -3264,7 +3376,7 @@ document.getElementById('iSave').addEventListener('click', async ()=>{
     storyPostedAt: document.getElementById('iStoryPostedAt').value
       ? new Date(document.getElementById('iStoryPostedAt').value).toISOString() : null,
     notes: document.getElementById('iNotes').value.trim(),
-    photo: editingPhoto,
+    photos: editingPhotos.slice(),
   };
   if(editingInvId){
     const it = invItems.find(x => x.id === editingInvId);
@@ -3283,17 +3395,80 @@ document.getElementById('iSave').addEventListener('click', async ()=>{
   render();
 });
 
-// ---- Foto ----
-function setPhotoPreview(url){
-  const prev = document.getElementById('iPhotoPrev');
-  if(url){ prev.src = url; prev.classList.remove('off'); }
-  else { prev.removeAttribute('src'); prev.classList.add('off'); }
+// ---- Fotos ----
+// A primeira da lista é a capa. Ordenar é só isso: mover uma foto para a
+// frente — daí o ★ em vez de arrastar, que no celular competiria com o scroll.
+function renderPhotoGrid(){
+  const grid = document.getElementById('iPhotoGrid');
+  grid.innerHTML = '';
+  editingPhotos.forEach((url, idx)=>{
+    const tile = document.createElement('div');
+    tile.className = 'ph-tile';
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.title = 'Ver maior';
+    img.addEventListener('click', ()=> openLightbox(editingPhotos, idx));
+    tile.appendChild(img);
+    if(idx === 0){
+      const tag = document.createElement('span');
+      tag.className = 'ph-cover';
+      tag.textContent = 'capa';
+      tile.appendChild(tag);
+    } else {
+      const star = document.createElement('button');
+      star.type = 'button';
+      star.className = 'ph-star';
+      star.title = 'Usar como capa';
+      star.textContent = '★';
+      star.addEventListener('click', ()=>{
+        editingPhotos.splice(idx, 1);
+        editingPhotos.unshift(url);
+        renderPhotoGrid();
+      });
+      tile.appendChild(star);
+    }
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'ph-del';
+    del.title = 'Remover foto';
+    del.textContent = '✕';
+    del.addEventListener('click', ()=>{
+      // Foto que entrou agora e sai agora: o arquivo no servidor não serve
+      // para mais nada, entra na lista de descarte do fechamento.
+      if(!editingPhotosOriginal.includes(url)) editingPhotoScrap.push(url);
+      editingPhotos.splice(idx, 1);
+      renderPhotoGrid();
+      setPhotoState('');
+    });
+    tile.appendChild(del);
+    grid.appendChild(tile);
+  });
+  pendingPhotos.forEach(p=>{
+    const tile = document.createElement('div');
+    tile.className = 'ph-tile pending';
+    const img = document.createElement('img');
+    img.src = p.url;
+    img.alt = '';
+    tile.appendChild(img);
+    grid.appendChild(tile);
+  });
+  // Salvar com upload em vôo gravaria o item sem a foto que está subindo.
+  document.getElementById('iSave').disabled = pendingPhotos.length > 0;
 }
+
+document.getElementById('iPhotoHint').textContent =
+  `Até ${MAX_PHOTOS} fotos · a primeira é a capa (★ troca)`;
+
+function dropPendingPhotos(){
+  pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
+  pendingPhotos = [];
+}
+
 function setPhotoState(msg, isError){
   const el = document.getElementById('iPhotoState');
   el.textContent = msg;
   el.classList.toggle('error', !!isError);
-  document.getElementById('iSave').disabled = msg === 'enviando…';
 }
 
 // Foto de celular tem 3-8 MB e ~4000 px de lado. Reduzir no canvas troca isso
@@ -3317,46 +3492,67 @@ async function downscaleImage(file, maxEdge, quality){
   return blob || file;
 }
 
+// Uma requisição por foto, em fila e não em paralelo: são fotos de celular no
+// 4G da casa, e três uploads simultâneos deixam os três lentos.
 document.getElementById('iPhotoFile').addEventListener('change', async (e)=>{
-  const raw = e.target.files && e.target.files[0];
-  if(!raw) return;
-  if(!/^image\//.test(raw.type)){ alert('Escolha uma imagem.'); return; }
+  const chosen = [...(e.target.files || [])];
+  // Zera já: senão reescolher o mesmo arquivo depois não dispara change.
+  e.target.value = '';
+  const files = chosen.filter(f => /^image\//.test(f.type));
+  if(!files.length){
+    if(chosen.length) alert('Escolha imagens.');
+    return;
+  }
+  const room = MAX_PHOTOS - editingPhotos.length - pendingPhotos.length;
+  if(room <= 0){
+    setPhotoState(`Já são ${MAX_PHOTOS} fotos — remova uma para colocar outra.`, true);
+    return;
+  }
+  const take = files.slice(0, room);
+  const sobraram = files.length - take.length;
 
   const gen = modalGeneration;
-  if(previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
-  previewBlobUrl = URL.createObjectURL(raw);
-  setPhotoPreview(previewBlobUrl);          // preview instantâneo, antes do upload
-  setPhotoState('enviando…');
+  const jobs = take.map(file => ({ file, url: URL.createObjectURL(file) }));
+  pendingPhotos.push(...jobs);
+  renderPhotoGrid();
 
-  try{
-    const blob = await downscaleImage(raw);
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': blob.type || 'image/jpeg' },
-      body: blob,
-    });
-    if(!res.ok) throw new Error('HTTP ' + res.status);
-    const { url } = await res.json();
+  let enviadas = 0, falhas = 0;
+  for(const job of jobs){
+    setPhotoState(jobs.length > 1
+      ? `enviando ${enviadas + falhas + 1} de ${jobs.length}…`
+      : 'enviando…');
+    let url = null;
+    try{
+      const blob = await downscaleImage(job.file);
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type || 'image/jpeg' },
+        body: blob,
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      url = (await res.json()).url;
+    }catch(err){
+      console.error(err);
+      falhas++;
+    }
     // Modal já fechou ou trocou de item: a foto não é mais deste contexto.
-    // Descarta o arquivo em vez de pintá-lo no item errado.
-    if(gen !== modalGeneration){ deletePhotoFile(url); return; }
-    if(editingPhoto && editingPhoto !== editingPhotoOriginal) editingPhotoScrap.push(editingPhoto);
-    editingPhoto = url;
-    setPhotoPreview(url);
-    setPhotoState('foto enviada ✓');
-  }catch(err){
-    console.error(err);
-    if(gen !== modalGeneration) return;
-    setPhotoState('não deu para enviar — salve o item e tente de novo', true);
+    // Descarta o arquivo em vez de pintá-lo no item errado, e para a fila.
+    if(gen !== modalGeneration){
+      if(url) deletePhotoFile(url);
+      jobs.slice(jobs.indexOf(job)).forEach(j => URL.revokeObjectURL(j.url));
+      return;
+    }
+    URL.revokeObjectURL(job.url);
+    pendingPhotos = pendingPhotos.filter(p => p !== job);
+    if(url){ editingPhotos.push(url); enviadas++; }
+    renderPhotoGrid();
   }
-});
 
-document.getElementById('iPhotoRemove').addEventListener('click', ()=>{
-  if(editingPhoto && editingPhoto !== editingPhotoOriginal) editingPhotoScrap.push(editingPhoto);
-  editingPhoto = null;
-  setPhotoPreview(null);
-  setPhotoState('');
-  document.getElementById('iPhotoFile').value = '';   // senão reescolher o mesmo arquivo não dispara change
+  const partes = [];
+  if(enviadas) partes.push(enviadas === 1 ? 'foto enviada ✓' : `${enviadas} fotos enviadas ✓`);
+  if(falhas) partes.push(`${falhas} ${falhas === 1 ? 'não subiu' : 'não subiram'} — salve o item e tente de novo`);
+  if(sobraram) partes.push(`${sobraram} ${sobraram === 1 ? 'ficou' : 'ficaram'} de fora: o limite é ${MAX_PHOTOS}`);
+  setPhotoState(partes.join(' · '), falhas > 0 || sobraram > 0);
 });
 
 // Best-effort: o item já foi salvo apontando para outra foto, então falhar aqui
@@ -3366,17 +3562,22 @@ function deletePhotoFile(url){
   // Guarda contra apagar arquivo que algum item ainda referencia — pela UI
   // não acontece (cada upload tem nome único), mas um blob restaurado à mão
   // pode ter dois itens na mesma foto.
-  if(invItems.some(i => i.photo === url)) return;
+  if(invItems.some(i => (i.photos || []).includes(url))) return;
   fetch('/api/upload/' + encodeURIComponent(url.split('/').pop()), { method:'DELETE' }).catch(()=>{});
 }
 function settlePhotos(committed){
   editingPhotoScrap.forEach(deletePhotoFile);
   if(committed){
-    if(editingPhotoOriginal && editingPhotoOriginal !== editingPhoto) deletePhotoFile(editingPhotoOriginal);
+    // Gravou: o que saiu da lista não é mais referenciado por ninguém.
+    editingPhotosOriginal.filter(u => !editingPhotos.includes(u)).forEach(deletePhotoFile);
   } else {
-    if(editingPhoto && editingPhoto !== editingPhotoOriginal) deletePhotoFile(editingPhoto);
+    // Cancelou: o item continua com as fotos de antes, então o que subiu
+    // durante esta edição é que fica órfão.
+    editingPhotos.filter(u => !editingPhotosOriginal.includes(u)).forEach(deletePhotoFile);
   }
   editingPhotoScrap = [];
+  editingPhotos = [];
+  editingPhotosOriginal = [];
 }
 
 // ---- Texto do anúncio ----

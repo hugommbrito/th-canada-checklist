@@ -35,6 +35,13 @@
   // Story do Instagram some da timeline em 24h: passado isso o anúncio não está
   // mais no ar para ninguém, mesmo com o item ainda "Anunciado".
   const STORY_TTL_H = 24;
+  // Teto de fotos por item. Existe por causa do blob: o inventário inteiro vai
+  // num único valor do kv_store, e cada caminho de foto custa ~30 bytes ali —
+  // o limite real é a paciência de quem tira as fotos, não o tamanho.
+  const MAX_PHOTOS = 8;
+  // Só caminho do nosso próprio /uploads: é o que fecha 'javascript:' e 'data:'
+  // antes de a URL virar src de um <img> na tabela.
+  const PHOTO_PATH_RE = /^\/uploads\/[\w.\-]+$/;
   const OWNERS = ['Hugo','Taís','Ambos'];
   const TASK_STATUSES = ['A fazer','Em andamento','Concluído'];
   const TASK_QUEUES = [
@@ -126,6 +133,21 @@
     });
   }
   function moneyToInput(cents){ return cents == null ? '' : fmtMoneyPlain(cents); }
+  // Um item tem uma lista de fotos, e a primeira é a capa (a que aparece na
+  // tabela). `photo`, no singular, é o formato de quando era uma foto só:
+  // item gravado antes da mudança continua vindo assim, e entra como capa.
+  function normalizePhotos(raw){
+    const list = Array.isArray(raw.photos) ? raw.photos : (raw.photo ? [raw.photo] : []);
+    const out = [];
+    for(const p of list){
+      // Duplicata aqui não é hipótese remota: dois itens na mesma foto fazem a
+      // exclusão de um apagar o arquivo do outro, e é o que este de-dup evita
+      // dentro do item. A validação é aqui, uma vez, para quem desenha o <img>
+      // depois poder confiar no valor.
+      if(typeof p === 'string' && PHOTO_PATH_RE.test(p) && !out.includes(p)) out.push(p);
+    }
+    return out.slice(0, MAX_PHOTOS);
+  }
   function normalizeItem(raw){
     raw = raw || {};
     return {
@@ -138,7 +160,7 @@
       destination: DESTINATIONS.some(d=>d.id===raw.destination) ? raw.destination : 'A decidir',
       deadline: isISODate(raw.deadline) ? raw.deadline : null,
       notes: raw.notes || '',
-      photo: typeof raw.photo === 'string' && raw.photo ? raw.photo : null,
+      photos: normalizePhotos(raw),
       saleStatus: SALE_STAGES.includes(raw.saleStatus) ? raw.saleStatus : 'Não anunciado',
       askPrice: toCents(raw.askPrice),
       minPrice: toCents(raw.minPrice),
@@ -230,10 +252,10 @@
 
   return {
     DESTINATIONS, SALE_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
-    DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, OWNERS, TASK_STATUSES, TASK_QUEUES,
+    DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS, OWNERS, TASK_STATUSES, TASK_QUEUES,
     todayISO, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
     newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
-    fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem,
+    fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizePhotos, normalizeItem,
     isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
     itemRisk, invTotals,
   };

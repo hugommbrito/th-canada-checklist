@@ -144,16 +144,25 @@ salvar, que é a confirmação de que foi lido como mil e duzentos.
 
 ### Fotos
 
-A foto é enviada do arquivo ou da câmera e reduzida no próprio navegador antes de subir
-(1280px, JPEG) — uma foto de celular sai de vários MB para uns 200 KB, o que torna o
-upload viável no 4G. O reencode ainda descarta o EXIF inteiro, inclusive a
-geolocalização de dentro de casa, e normaliza HEIC de iPhone.
+Cada item aceita até 8 fotos, e a primeira da lista é a capa: é ela que aparece na
+tabela, com um contador quando há mais de uma. O ★ de uma foto a promove a capa — não
+tem arrastar, que no celular competiria com o scroll da página. Clicar na miniatura abre
+a galeria, que navega com as setas do teclado, com `‹ ›` e fecha no `Esc`. Item gravado
+quando a foto era uma só continua sendo lido: o campo antigo entra como capa.
+
+As fotos são enviadas do arquivo ou da câmera, uma requisição por foto e em fila (três
+uploads simultâneos no 4G da casa deixam os três lentos), e reduzidas no próprio
+navegador antes de subir (1280px, JPEG) — uma foto de celular sai de vários MB para uns
+200 KB. O reencode ainda descarta o EXIF inteiro, inclusive a geolocalização de dentro
+de casa, e normaliza HEIC de iPhone. Enquanto uma foto sobe, a miniatura já aparece
+apagada e o botão Salvar fica desabilitado: salvar no meio do upload gravaria o item sem
+ela.
 
 Os arquivos ficam em `/uploads`, **ao lado do banco** — dentro do volume do Railway, e
-não em `public/`, que é reconstruído a cada deploy. Excluir o item ou trocar a foto apaga
-o arquivo antigo, mas só depois de a mudança ter sido efetivamente gravada: se a gravação
+não em `public/`, que é reconstruído a cada deploy. Excluir o item ou remover uma foto
+apaga o arquivo, mas só depois de a mudança ter sido efetivamente gravada: se a gravação
 falhar, o registro no banco continua apontando para aquela foto, então ela precisa
-continuar existindo.
+continuar existindo. Cancelar a edição também apaga o que subiu durante ela.
 
 ### Prazos
 

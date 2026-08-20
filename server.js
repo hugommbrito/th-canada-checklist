@@ -156,7 +156,10 @@ function itemView(it, moveDate, today) {
     resolvido: D.isResolved(it),
     prazo: it.deadline || null,
     risco,                                   // 'late' | 'after' | 'none' | null
-    temFoto: !!it.photo,
+    // temFoto continua existindo para quem já consome o resumo; a lista é que
+    // diz quantas são, agora que um item pode ter várias.
+    temFoto: it.photos.length > 0,
+    fotos: it.photos,
     observacoes: it.notes || null,
     venda: vende ? {
       status: it.saleStatus,
