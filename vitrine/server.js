@@ -1,0 +1,360 @@
+// Vitrine pública — o segundo serviço.
+//
+// Existe separado do painel por um motivo só: o painel mora na raiz de um
+// domínio e mostra piso de negociação, comprador e a thread de negociação. Um
+// link que circula em grupo de WhatsApp não pode estar no mesmo endereço que
+// isso, porque apagar o caminho da URL é a primeira coisa que alguém curioso
+// faz. Aqui, o endereço do painel só existe no ambiente deste processo: ele
+// nunca vai para o HTML, nem para o <img src> (as fotos passam pelo proxy), nem
+// para uma mensagem de erro.
+//
+// ATENÇÃO: este serviço NÃO tem express.static. Servir a pasta public/ aqui
+// publicaria o painel inteiro no domínio público. CSS e JS são lidos no boot e
+// embutidos no HTML — é o que mantém "sem build step" sem abrir essa porta.
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { Readable } = require('stream');
+const render = require('./render.js');
+
+const PORT = process.env.PORT || 3100;
+// Preferir a rede privada do Railway (http://painel.railway.internal:3000):
+// assim a URL pública do painel não existe nem como variável de ambiente aqui.
+const PAINEL = String(process.env.VITRINE_PAINEL_URL || '').trim().replace(/\/+$/, '');
+const TOKEN = String(process.env.VITRINE_TOKEN || '');
+const TTL_MS = Number(process.env.VITRINE_CACHE_TTL_MS || 45000);
+const STALE_MAX_MS = Number(process.env.VITRINE_STALE_MAX_MS || 6 * 3600 * 1000);
+const TIMEOUT_MS = Number(process.env.VITRINE_UPSTREAM_TIMEOUT_MS || 8000);
+const TZ = process.env.VITRINE_TZ || 'America/Sao_Paulo';
+// Alavanca para depois da mudança: desliga tudo sem tocar no painel.
+const DESLIGADA = !!String(process.env.VITRINE_DESLIGADA || '').trim();
+const PUBLIC_URL = String(process.env.VITRINE_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+
+const CSS = fs.readFileSync(path.join(__dirname, 'vitrine.css'), 'utf8');
+const JS = fs.readFileSync(path.join(__dirname, 'vitrine.client.js'), 'utf8');
+const FAVICON = fs.readFileSync(path.join(__dirname, '..', 'public', 'favicon.svg'), 'utf8');
+
+const CONFIGURADO = !!(PAINEL && TOKEN);
+// O host do painel, que a guarda antivazamento procura no HTML antes de responder.
+const HOST_PAINEL = (() => {
+  try { return PAINEL ? new URL(PAINEL).host : ''; } catch (e) { return ''; }
+})();
+
+// Mesma forma de nome que o painel gera (server.js, UPLOAD_NAME_RE). Estrita de
+// propósito: o PHOTO_PATH_RE do domain.js aceita "..", inofensivo como src no
+// painel e não aqui.
+const NOME_FOTO_RE = /^inv-\d+-[0-9a-f]{8}\.(jpg|png|webp)$/i;
+const TIPO_POR_EXT = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+// Slug: o mesmo formato que domain.js gera, validado antes de qualquer chamada.
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,62})[a-z0-9]$/;
+
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+
+// Express 4 não encaminha rejeição de handler async para o middleware de erro:
+// sem este embrulho, uma falha deixa a requisição pendurada até o timeout.
+const ac = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString('base64');
+  res.set('X-Robots-Tag', 'noindex, nofollow, noarchive, noimageindex, nosnippet');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('X-Content-Type-Options', 'nosniff');
+  // connect-src 'none' é a prova formal de que a página não fala com ninguém.
+  res.set('Content-Security-Policy', [
+    "default-src 'none'",
+    "img-src 'self'",
+    `style-src 'nonce-${res.locals.nonce}' https://fonts.googleapis.com`,
+    'font-src https://fonts.gstatic.com',
+    `script-src 'nonce-${res.locals.nonce}'`,
+    "connect-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join('; '));
+  next();
+});
+
+// ---- Cache em memória ----
+// A vitrine não pode bater no painel a cada visita: o link cai num grupo e dez
+// pessoas abrem no mesmo minuto.
+const cache = new Map();     // slug -> { at, vm, fim, fotos:Set }
+const emVoo = new Map();     // slug -> Promise (single-flight)
+const MAX_ENTRADAS = 50;
+// Último resultado de conversa com o painel, só para o /healthz poder ser
+// honesto sobre de quem é o problema.
+let ultimoPainel = { ok: null, quando: null };
+
+function fmtQuando(iso) {
+  try {
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    }).format(new Date(iso)).replace(',', ' às');
+  } catch (e) { return ''; }
+}
+function hojeISO() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+}
+
+async function buscaNoPainel(slug) {
+  const r = await fetch(`${PAINEL}/api/vitrine/${encodeURIComponent(slug)}`, {
+    headers: { 'X-Vitrine-Token': TOKEN },
+    redirect: 'error',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  ultimoPainel = { ok: true, quando: new Date().toISOString() };
+  if (r.status === 404 || r.status === 410) return { fim: true };
+  if (!r.ok) throw new Error('painel respondeu ' + r.status);
+  return { dados: await r.json() };
+}
+
+// Transforma a resposta do painel no view-model da página. É aqui, e em nenhum
+// outro lugar, que o caminho da foto vira URL do proxy: depois deste ponto não
+// existe mais nada que aponte para o painel.
+function paraViewModel(slug, d) {
+  const fotos = new Set();
+  const itens = (d.itens || []).map(it => {
+    const nomes = (it.fotos || []).filter(n => NOME_FOTO_RE.test(n));
+    nomes.forEach(n => fotos.add(n));
+    return {
+      id: it.id,
+      nome: it.nome,
+      estado: it.estado,
+      descricao: it.descricao,
+      cents: it.preco ? it.preco.cents : null,
+      precoTexto: (it.preco && it.preco.cents != null) ? it.preco.brl : 'a combinar',
+      reservado: !!it.reservado,
+      fotos: nomes.map(n => `/f/${encodeURIComponent(slug)}/${encodeURIComponent(n)}`),
+    };
+  });
+  const lista = d.lista || {};
+  return {
+    vm: {
+      chave: slug,
+      titulo: 'Itens à venda',
+      recado: lista.recado || '',
+      whatsapp: String(lista.whatsapp || '').replace(/\D/g, ''),
+      validade: lista.validade || null,
+      validadeTexto: lista.validade ? lista.validade.split('-').reverse().slice(0, 2).join('/') : '',
+      itens,
+      atualizadoEm: d.geradoEm ? fmtQuando(d.geradoEm) : '',
+      geradoEm: d.geradoEm,
+      impressaEm: fmtQuando(new Date().toISOString()),
+      urlDaLista: PUBLIC_URL ? `${PUBLIC_URL}/l/${slug}` : '',
+      canonical: PUBLIC_URL ? `${PUBLIC_URL}/l/${slug}` : '',
+    },
+    fotos,
+  };
+}
+
+function guardaEntrada(slug, entrada) {
+  cache.set(slug, entrada);
+  // Teto de memória: o Map preserva ordem de inserção, então o mais velho sai.
+  while (cache.size > MAX_ENTRADAS) cache.delete(cache.keys().next().value);
+}
+
+// Devolve { estado: 'ok'|'fim'|'fora', vm, atrasado }.
+async function pegaLista(slug) {
+  const agora = Date.now();
+  const cached = cache.get(slug);
+  if (cached && agora - cached.at < TTL_MS) {
+    return cached.fim ? { estado: 'fim' } : { estado: 'ok', vm: cached.vm, atrasado: false };
+  }
+  if (!CONFIGURADO) return { estado: 'fora' };
+
+  let p = emVoo.get(slug);
+  if (!p) {
+    p = buscaNoPainel(slug).finally(() => emVoo.delete(slug));
+    emVoo.set(slug, p);
+  }
+  try {
+    const r = await p;
+    if (r.fim) {
+      // Cacheia a negativa: sem isto, um link morto circulando martela o painel.
+      guardaEntrada(slug, { at: Date.now(), fim: true });
+      return { estado: 'fim' };
+    }
+    const { vm, fotos } = paraViewModel(slug, r.dados);
+    guardaEntrada(slug, { at: Date.now(), vm, fotos, fim: false });
+    return { estado: 'ok', vm, atrasado: false };
+  } catch (err) {
+    ultimoPainel = { ok: false, quando: new Date().toISOString() };
+    console.error('[vitrine] painel indisponível:', err.name);
+    // Painel fora do ar: melhor a lista de meia hora atrás que uma página de
+    // erro. Passado o teto, não: vender o que já foi vendido é pior.
+    if (cached && !cached.fim && agora - cached.at < STALE_MAX_MS) {
+      return { estado: 'ok', vm: cached.vm, atrasado: agora - cached.at > 3600 * 1000 };
+    }
+    if (cached && cached.fim) return { estado: 'fim' };
+    return { estado: 'fora' };
+  }
+}
+
+// ---- Contagem de visitas ----
+// Visita é uma pessoa abrindo a página, não um fetch de dados (o cache faz uma
+// coisa não ser a outra). E o preview de link do WhatsApp abre a página sozinho
+// quando alguém cola o link — quem cola é o próprio casal, então não conta.
+const ROBO_RE = /bot|crawl|spider|preview|whatsapp|facebookexternalhit|telegram|slurp|curl|wget|python|node-fetch|headlesschrome|monitor/i;
+const SAL = crypto.randomBytes(16);
+const vistos = new Map();    // hash -> quando
+const DEDUP_MS = 30 * 60 * 1000;
+setInterval(() => {
+  const corte = Date.now() - DEDUP_MS;
+  for (const [k, v] of vistos) if (v < corte) vistos.delete(k);
+}, 5 * 60 * 1000).unref();
+
+function contaVisita(req, slug) {
+  if (!CONFIGURADO) return;
+  const ua = req.get('user-agent') || '';
+  if (ROBO_RE.test(ua)) return;
+  // Hash truncado, com sal sorteado a cada processo: serve para não contar duas
+  // vezes quem recarrega, e não serve para identificar ninguém. Nada é gravado
+  // em disco, nada vai para o painel além do "mais um".
+  const h = crypto.createHash('sha256').update(SAL).update(slug + '|' + (req.ip || '') + '|' + ua).digest('base64').slice(0, 16);
+  const agora = Date.now();
+  if (vistos.has(h) && agora - vistos.get(h) < DEDUP_MS) return;
+  vistos.set(h, agora);
+  fetch(`${PAINEL}/api/vitrine/${encodeURIComponent(slug)}/visita`, {
+    method: 'POST',
+    headers: { 'X-Vitrine-Token': TOKEN },
+    redirect: 'error',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  }).catch(() => {});   // best-effort: contador não atrapalha quem está lendo
+}
+
+// ---- Páginas ----
+function responde(res, status, html) {
+  // Guarda antivazamento: se por qualquer caminho o endereço do painel apareceu
+  // no HTML, é melhor não responder do que vazar.
+  const achou = render.garantirSemPainel(html, [HOST_PAINEL, '/uploads/']);
+  if (achou) {
+    console.error('[vitrine] BLOQUEADO: o HTML continha', achou);
+    return res.status(500).type('html').send(render.aviso({
+      titulo: 'Um instante', texto: 'Não conseguimos montar a página agora. Tente de novo em alguns minutos.',
+      nonce: res.locals.nonce, css: CSS,
+    }));
+  }
+  res.status(status).type('html').send(html);
+}
+
+// Mesmos bytes para "não existe", "desligada" e "vencida": distinguir criaria um
+// oráculo de quais links existem, e o texto abaixo serve para os três casos.
+function paginaSemLink(res) {
+  responde(res, 404, render.aviso({
+    titulo: 'Link não encontrado',
+    texto: 'Este link não está mais válido. Se alguém te mandou, peça um link novo.',
+    nonce: res.locals.nonce, css: CSS,
+  }));
+}
+function paginaIndisponivel(res) {
+  res.set('Retry-After', '120');
+  responde(res, 503, render.aviso({
+    titulo: 'Um instante',
+    texto: 'Não conseguimos carregar a lista agora. Tente de novo em alguns minutos.',
+    nonce: res.locals.nonce, css: CSS,
+  }));
+}
+
+app.get('/l/:slug', ac(async (req, res) => {
+  const slug = String(req.params.slug || '');
+  res.set('Cache-Control', 'no-store');   // o cache é deste servidor, não do navegador
+  if (DESLIGADA || !SLUG_RE.test(slug) || slug.length < 12) return paginaSemLink(res);
+
+  const r = await pegaLista(slug);
+  if (r.estado === 'fim') return paginaSemLink(res);
+  if (r.estado === 'fora') return paginaIndisponivel(res);
+
+  // Validade reavaliada aqui, e não só no fetch: assim a lista vence sozinha
+  // mesmo servida do cache e mesmo com o painel fora do ar.
+  if (r.vm.validade && r.vm.validade < hojeISO()) return paginaSemLink(res);
+
+  const vm = Object.assign({}, r.vm, { atrasado: r.atrasado, impressaEm: fmtQuando(new Date().toISOString()) });
+  responde(res, 200, render.pagina(vm, { nonce: res.locals.nonce, css: CSS, js: JS }));
+  contaVisita(req, slug);   // depois de responder: nunca atrasa a página
+}));
+
+// Proxy de foto, com escopo na lista. Nunca aceita URL — só nome de arquivo, e
+// só se aquele arquivo pertence a um item visível daquela lista.
+app.get('/f/:slug/:nome', ac(async (req, res) => {
+  const slug = String(req.params.slug || '');
+  const nome = path.basename(String(req.params.nome || ''));
+  if (DESLIGADA || !SLUG_RE.test(slug) || !NOME_FOTO_RE.test(nome)) return res.status(404).end();
+
+  const r = await pegaLista(slug);
+  if (r.estado !== 'ok') return res.status(404).end();
+  const entrada = cache.get(slug);
+  if (!entrada || !entrada.fotos || !entrada.fotos.has(nome)) return res.status(404).end();
+
+  const tipo = TIPO_POR_EXT[path.extname(nome).toLowerCase()];
+  if (!tipo) return res.status(404).end();
+
+  let up;
+  try {
+    up = await fetch(`${PAINEL}/api/vitrine/${encodeURIComponent(slug)}/foto/${encodeURIComponent(nome)}`, {
+      headers: { 'X-Vitrine-Token': TOKEN },
+      // Um Location do painel jamais pode chegar ao navegador: seria o domínio
+      // vazando pelo caminho mais bobo.
+      redirect: 'error',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (err) {
+    console.error('[vitrine] foto indisponível:', err.name);
+    return res.status(502).end();
+  }
+  if (!up.ok || !up.body) return res.status(404).end();
+
+  // Content-Type derivado da extensão, nunca do upstream — mesma regra do painel
+  // (e é o que torna inofensivo não conferir os magic bytes).
+  res.type(tipo);
+  // Uma hora, e não o "365d immutable" do painel: aqui a URL é revogável (item
+  // vendido sai da lista), e cache de um ano tornaria a revogação inútil.
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.set('X-Robots-Tag', 'noindex, noimageindex');
+  const fluxo = Readable.fromWeb(up.body);
+  req.on('close', () => fluxo.destroy());
+  fluxo.pipe(res);
+}));
+
+app.get('/favicon.svg', (req, res) => {
+  res.type('image/svg+xml').set('Cache-Control', 'public, max-age=604800').send(FAVICON);
+});
+
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send('User-agent: *\nDisallow: /\n');
+});
+
+// O "servico" existe para pegar o erro de deploy mais provável: o Railway rodar
+// `npm start` neste serviço e subir um segundo painel, vazio, num endereço
+// público. Confira isto antes de mandar qualquer link.
+app.get('/healthz', (req, res) => {
+  res.set('Cache-Control', 'no-store').json({
+    servico: 'vitrine',
+    ok: CONFIGURADO && !DESLIGADA,
+    configurado: CONFIGURADO,
+    desligada: DESLIGADA,
+    // Nunca entra no `ok`: painel fora do ar é problema do painel, e derrubar o
+    // healthcheck daqui só faria o Railway reiniciar quem está são.
+    painel: ultimoPainel.ok === null ? 'ainda não consultado' : (ultimoPainel.ok ? 'ok' : 'inalcançável'),
+    painelEm: ultimoPainel.quando,
+    listasEmCache: cache.size,
+  });
+});
+
+// Raiz e qualquer outra coisa: a mesma página de link inválido. Nada aqui conta
+// que existe um painel, nem quantas listas existem.
+app.use((req, res) => paginaSemLink(res));
+
+// Erro: o nome do erro vai para o log (a mensagem de um fetch falho carrega o
+// endereço do painel no cause), e para a página vai texto fixo.
+app.use((err, req, res, next) => {
+  console.error('[vitrine] erro:', err && err.name);
+  if (res.headersSent) return;
+  paginaIndisponivel(res);
+});
+
+app.listen(PORT, () => {
+  console.log(`[vitrine] no ar na porta ${PORT} · painel: ${CONFIGURADO ? 'configurado' : 'NÃO CONFIGURADO'} · ttl: ${Math.round(TTL_MS / 1000)}s${DESLIGADA ? ' · DESLIGADA' : ''}`);
+  if (!CONFIGURADO) console.error('[vitrine] faltam VITRINE_PAINEL_URL e/ou VITRINE_TOKEN — nenhuma lista vai abrir');
+});
