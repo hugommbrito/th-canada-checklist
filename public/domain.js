@@ -49,6 +49,17 @@
     { id:'waiting', label:'Aguardando terceiros' },
   ];
 
+  // ---- Listas de venda (a vitrine pública) ----
+  // O slug é a única credencial de um link compartilhado, então é sorteado com
+  // CSPRNG e não com Math.random — que é previsível a partir de dois valores
+  // consecutivos. Alfabeto sem 0/o/1/l/i: o link vai ser lido em voz alta ou
+  // digitado à mão em algum momento.
+  const SHARE_SLUG_ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz';   // 31 símbolos
+  const SHARE_SLUG_LEN = 12;                                       // 31^12 ≈ 59 bits
+  const SHARE_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,62})[a-z0-9]$/;
+  // Teto para o blob não crescer sem limite; a casa inteira não passa de 200 itens.
+  const MAX_SHARE_EXCLUDED = 500;
+
   function todayISO(tz){
     // Com timeZone explícito o "hoje" é o de quem usa o painel, não o do
     // container: no servidor em UTC, 21h de Brasília já é o dia seguinte.
@@ -85,6 +96,7 @@
     return String(v || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
   }
   function newInvId(){ return 'inv-' + Date.now() + Math.random().toString(36).slice(2,5); }
+  function newShareId(){ return 'lst-' + Date.now() + Math.random().toString(36).slice(2,5); }
   function newReceiptId(){ return 'r-' + Date.now() + Math.random().toString(36).slice(2,6); }
   function isISODate(v){
     return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -154,8 +166,7 @@
   }
   function normalizeItem(raw){
     raw = raw || {};
-  
-  return {
+    return {
       id: raw.id || newInvId(),
       title: raw.title || '',
       category: raw.category || INV_UNCATEGORIZED,
@@ -297,15 +308,118 @@
     return list.filter(it => matchesInvFilter(it, nf, ctx));
   }
 
+  // ---- Listas de venda ----
+  function onlyDigits(v, min, max){
+    const d = String(v == null ? '' : v).replace(/\D/g, '');
+    return (d.length >= min && d.length <= max) ? d : '';
+  }
+  function slugifyName(v){
+    return norm(v).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24).replace(/-+$/, '');
+  }
+  function randomSlugTail(n){
+    const A = SHARE_SLUG_ALPHABET, out = [];
+    const buf = new Uint8Array(n * 2);
+    while(out.length < n){
+      globalThis.crypto.getRandomValues(buf);
+      for(const b of buf){
+        // Descarte por rejeição: 248 = 31*8, então os bytes aceitos caem de
+        // forma uniforme no alfabeto. Com `b % 31` puro os sete primeiros
+        // símbolos sairiam mais que os outros — viés pequeno e gratuito.
+        if(b >= 248) continue;
+        out.push(A[b % A.length]);
+        if(out.length === n) break;
+      }
+    }
+    return out.join('');
+  }
+  function newShareSlug(name){
+    const base = slugifyName(name);
+    const tail = randomSlugTail(SHARE_SLUG_LEN);
+    return base ? base + '-' + tail : tail;
+  }
+  function isShareSlug(v){
+    return typeof v === 'string' && v.length >= SHARE_SLUG_LEN && SHARE_SLUG_RE.test(v);
+  }
+  function normalizeShareFilter(raw){
+    const f = normalizeInvFilter(raw);
+    // "Em risco" e "story vencido" são lentes de triagem, não critério de
+    // vitrine: salvos numa lista, o conteúdo dela mudaria com o relógio — um
+    // item entrando na lista porque o story dele venceu. Ninguém pediu isso.
+    f.risk = false;
+    f.storyOut = false;
+    return f;
+  }
+  function normalizeShare(raw){
+    raw = raw || {};
+    return {
+      id: raw.id || newShareId(),
+      // Slug inválido NÃO virá um slug novo: regenerar em silêncio mataria um
+      // link já mandado no WhatsApp. Fica vazio, e a tela oferece "gerar novo"
+      // como decisão explícita.
+      slug: isShareSlug(raw.slug) ? raw.slug : '',
+      name: String(raw.name || '').trim().slice(0, 60),
+      intro: String(raw.intro || '').trim().slice(0, 400),
+      // Só dígitos: '(31) 99999-8888' e '+55 31 99999 8888' viram a mesma
+      // coisa, que é o que o wa.me aceita. Fora de 10..15 não é telefone.
+      whatsapp: onlyDigits(raw.whatsapp, 10, 15),
+      active: raw.active !== false,          // nasce ligada
+      expiresAt: isISODate(raw.expiresAt) ? raw.expiresAt : null,
+      filter: normalizeShareFilter(raw.filter),
+      excluded: Array.isArray(raw.excluded)
+        ? [...new Set(raw.excluded.filter(x => typeof x === 'string' && x))].slice(0, MAX_SHARE_EXCLUDED)
+        : [],
+      createdAt: isISODateTime(raw.createdAt) ? raw.createdAt : new Date().toISOString(),
+      lastEditedBy: raw.lastEditedBy || '',
+      lastEditedAt: raw.lastEditedAt || '',
+    };
+  }
+  // O blob é objeto e não array porque carrega também o endereço onde a vitrine
+  // está publicada: o front é arquivo estático e não lê variável de ambiente.
+  function normalizeShareStore(raw){
+    const obj = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : { lists: raw };
+    const lists = Array.isArray(obj.lists) ? obj.lists : [];
+    return {
+      baseUrl: String(obj.baseUrl || '').trim().replace(/\/+$/, ''),
+      lists: lists.map(normalizeShare),
+    };
+  }
+  function shareStatus(share, today){
+    if(!share.slug) return 'sem-link';
+    if(!share.active) return 'desativada';
+    if(share.expiresAt && share.expiresAt < (today || todayISO())) return 'vencida';
+    return 'ativa';
+  }
+  // O que pode aparecer numa lista pública. Mora aqui, e não na rota, porque a
+  // tela de gestão precisa contar exatamente os mesmos itens que a vitrine vai
+  // mostrar: dizer "12 itens" e a página mostrar 9 acaba com a confiança na tela.
+  function isPublicItem(it){
+    if(it.destination !== 'Vender') return false;   // triagem não é vitrine
+    if(it.saleStatus === 'Vendido') return false;   // vendido sai sozinho
+    if(isResolved(it)) return false;                // rede de segurança
+    return !!it.title;
+  }
+  function shareItems(list, share, ctx){
+    const fora = new Set(share.excluded);
+    return filterInvItems(list, share.filter, ctx)
+      .filter(it => !fora.has(it.id) && isPublicItem(it));
+  }
+  function waLink(whatsapp, text){
+    const fone = onlyDigits(whatsapp, 10, 15);
+    if(!fone) return null;
+    return 'https://wa.me/' + fone + (text ? '?text=' + encodeURIComponent(text) : '');
+  }
+
   return {
     DESTINATIONS, SALE_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
     DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS, OWNERS, TASK_STATUSES, TASK_QUEUES,
-    INV_FILTER_KEYS,
+    SHARE_SLUG_LEN, INV_FILTER_KEYS,
     norm, todayISO, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
-    newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
+    newInvId, newReceiptId, newShareId, isISODate, isISODateTime, parseMoney, toCents,
     fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizePhotos, normalizeItem,
     isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
     itemRisk, invTotals,
     normalizeInvFilter, matchesInvFilter, filterInvItems,
+    newShareSlug, isShareSlug, normalizeShare, normalizeShareStore, shareStatus,
+    isPublicItem, shareItems, waLink,
   };
 });

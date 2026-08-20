@@ -1074,6 +1074,76 @@
   .dt-receipt i{font-style:normal;font-weight:400;opacity:.7;font-size:10px;}
 
   /* ---- toast ---- */
+  /* ---- listas de venda ---- */
+  .sh-card{
+    border:1px solid #e0d7bd;border-radius:9px;padding:12px;margin-bottom:12px;
+    background:rgba(0,0,0,0.02);
+  }
+  .sh-card.off{opacity:.62;}
+  .sh-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .sh-head input.sh-name{
+    flex:1;min-width:0;padding:6px 8px;border:1px solid #d8cfb6;border-radius:7px;
+    font-family:'Inter',sans-serif;font-size:14px;font-weight:600;background:#fff;color:var(--ink);
+  }
+  .sh-badge{
+    font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;
+    text-transform:uppercase;padding:3px 7px;border-radius:5px;white-space:nowrap;
+  }
+  .sh-badge.ativa{background:rgba(62,142,126,0.20);color:#276a5a;}
+  .sh-badge.desativada{background:rgba(0,0,0,0.07);color:#6b6558;}
+  .sh-badge.vencida{background:rgba(217,99,90,0.18);color:#a33;}
+  .sh-badge.sem-link{background:rgba(232,163,61,0.22);color:#8a5c14;}
+  .sh-link{display:flex;gap:6px;align-items:center;margin-bottom:10px;}
+  .sh-link input{
+    flex:1;min-width:0;padding:6px 8px;border:1px solid #d8cfb6;border-radius:7px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;background:#fff;color:var(--ink-soft);
+  }
+  .sh-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;margin-bottom:10px;}
+  .sh-grid .field{margin-bottom:0;}
+  .sh-grid .wide{grid-column:1 / -1;}
+  .sh-comp{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.6;
+    color:var(--ink-soft);margin:0 0 8px;
+  }
+  .sh-comp .warn{color:#8a5c14;}
+  .sh-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
+  .sh-chip{
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;padding:3px 7px;border-radius:5px;
+    background:rgba(0,0,0,0.05);color:#6b6558;
+  }
+  .sh-acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  /* .add-btn.ghost é desenhado para o fundo navy do painel: dentro do modal, de
+     papel, o texto dele fica invisível. Aqui vira o mesmo botão claro que o
+     .cat-row já usa nos modais. */
+  .sh-card .add-btn.ghost, .sh-link .add-btn.ghost{
+    border:1px solid #d8cfb6;background:#fff;color:var(--ink);
+    padding:6px 10px;font-size:12px;border-radius:7px;text-decoration:none;
+    font-family:'Inter',sans-serif;white-space:nowrap;
+  }
+  .sh-card .add-btn.ghost:hover{border-color:var(--amber-dim);color:var(--amber-dim);}
+  .sh-card .add-btn.ghost:disabled{opacity:.45;cursor:not-allowed;}
+  .sh-card .add-btn.ghost.danger{color:var(--coral);border-color:#e4c9c6;}
+  .sh-card .add-btn.ghost.danger:hover{background:var(--coral);color:#fff;border-color:var(--coral);}
+  /* A URL inteira tem que caber para ser conferida antes de mandar. */
+  .sh-link{flex-wrap:wrap;}
+  .sh-link input{flex:1 1 100%;}
+  .sh-visits{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);white-space:nowrap;}
+  .sh-empty{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);
+    font-style:italic;margin:0 0 12px;
+  }
+  /* Barra do modo "editar itens da lista": some junto com o modo. */
+  .sh-editbar{
+    display:none;align-items:center;gap:10px;flex-wrap:wrap;
+    background:rgba(232,163,61,0.14);border:1px solid var(--amber-dim);
+    border-radius:9px;padding:9px 12px;margin-bottom:12px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--paper);
+  }
+  .sh-editbar.on{display:flex;}
+  .sh-editbar b{font-family:'Inter',sans-serif;font-size:13px;}
+  .inv-row.share-out{opacity:.5;}
+  .inv-row.share-out .inv-name{text-decoration:line-through;}
+
   .inv-toast{
     position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
     background:var(--navy-800);color:var(--paper);border:1px solid var(--navy-700);
@@ -1281,7 +1351,14 @@
       </select>
       <button class="add-btn ghost" id="invClearFilters">↺ Limpar</button>
       <button class="add-btn ghost" id="invOpenManageCats">⚙ Categorias</button>
+      <button class="add-btn ghost" id="invOpenShares">🔗 Listas<span class="n" id="shareCount"></span></button>
       <button class="add-btn" id="invOpenAdd">+ Novo item</button>
+    </div>
+
+    <div class="sh-editbar" id="shareEditBar">
+      <span>Editando os itens de <b id="shareEditName"></b> — desmarque o que não deve aparecer</span>
+      <span id="shareEditCount"></span>
+      <button class="add-btn" id="shareEditDone">Concluir</button>
     </div>
 
     <div class="inv-sheet">
@@ -1589,6 +1666,30 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="shareBackdrop">
+  <div class="modal wide">
+    <h2>Listas de venda</h2>
+    <p style="font-size:11px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;margin:0 0 14px;">
+      Cada lista é um link próprio, com os itens que você escolher. Quem abre marca o que quer e
+      cai no seu WhatsApp com a mensagem pronta. Piso de negociação, comprador e observações
+      internas nunca saem daqui.
+    </p>
+
+    <div class="field">
+      <label>Endereço da vitrine</label>
+      <input type="text" id="shareBaseUrl" placeholder="https://vitrine.up.railway.app">
+      <span class="hint-priv">Onde o segundo serviço está publicado. Sem isto não há link para copiar.</span>
+    </div>
+
+    <div id="shareList"></div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="shareClose">Fechar</button>
+      <button class="btn-primary" id="shareCreate">+ Nova lista com o filtro atual</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="photoBackdrop">
   <div class="modal">
     <img id="photoBig" alt="">
@@ -1624,6 +1725,7 @@ const {
   fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem,
   isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
   normalizeInvFilter, filterInvItems,
+  newShareSlug, normalizeShare, normalizeShareStore, shareStatus, isPublicItem,
 } = Painel;
 
 const todayISO = Painel.todayISO;
@@ -1808,6 +1910,98 @@ function mergeInventory(remote, local){
 function baselineIds(){
   try{ return new Set(JSON.parse(invBaseline || '[]').map(i => i.id)); }
   catch(e){ return new Set(); }
+}
+
+// ================= LISTAS DE VENDA =================
+// Duas chaves, e cada uma com um dono de escrita só: o navegador escreve as
+// listas e nunca os contadores; o servidor escreve os contadores e nunca as
+// listas. É o que dispensa fundir contador — não há corrida a resolver.
+const SHARES_KEY = 'toronto-tracker-shares';
+const SHARE_HITS_KEY = 'toronto-tracker-share-hits';
+
+let shareStore = { baseUrl:'', lists:[] };
+let shareHits = {};
+let sharesBaseline = '';
+let shareEditing = null;      // id da lista cujos itens estão sendo editados na tabela
+
+async function loadShares(){
+  try{
+    const res = await kvGet(SHARES_KEY);
+    const raw = (res && res.value) || '';
+    shareStore = normalizeShareStore(raw ? JSON.parse(raw) : null);
+    sharesBaseline = raw;
+  }catch(e){
+    console.error('Erro ao carregar listas', e);
+    shareStore = normalizeShareStore(null);
+    sharesBaseline = '';
+  }
+  try{
+    const res = await kvGet(SHARE_HITS_KEY);
+    shareHits = res && res.value ? JSON.parse(res.value) : {};
+  }catch(e){ shareHits = {}; }
+}
+
+// Mesma disciplina do inventário: ler antes de escrever e fundir por
+// lastEditedAt, porque são duas pessoas em dois celulares.
+function mergeShares(remote, local){
+  const out = new Map(remote.map(l => [l.id, l]));
+  local.forEach(l => {
+    const r = out.get(l.id);
+    if(!r){ out.set(l.id, l); return; }
+    if((l.lastEditedAt || '') >= (r.lastEditedAt || '')) out.set(l.id, l);
+  });
+  return [...out.values()];
+}
+
+async function saveShares(){
+  try{
+    const remote = await kvGet(SHARES_KEY);
+    const remoteStr = (remote && remote.value) || '';
+    if(remoteStr && remoteStr !== sharesBaseline){
+      const r = normalizeShareStore(JSON.parse(remoteStr));
+      shareStore.lists = mergeShares(r.lists, shareStore.lists);
+      // baseUrl é configuração de um valor só: quem escreveu por último manda,
+      // e o vazio nunca vence um endereço já configurado.
+      if(!shareStore.baseUrl) shareStore.baseUrl = r.baseUrl;
+    }
+    // Id que não existe mais no inventário não precisa continuar na exclusão.
+    const vivos = new Set(invItems.map(i => i.id));
+    shareStore.lists.forEach(l => { l.excluded = l.excluded.filter(id => vivos.has(id)); });
+    const payload = JSON.stringify(shareStore);
+    await kvSet(SHARES_KEY, payload);
+    sharesBaseline = payload;
+    return true;
+  }catch(e){
+    console.error('Erro ao salvar listas', e);
+    toast('⚠ Não deu para salvar as listas');
+    return false;
+  }
+}
+
+let shareSaveTimer = null;
+function saveSharesSoon(){
+  clearTimeout(shareSaveTimer);
+  shareSaveTimer = setTimeout(()=>{ shareSaveTimer = null; saveShares(); }, 800);
+}
+
+function stampShare(sh){
+  sh.lastEditedBy = getCurrentUser() || 'Ambos';
+  sh.lastEditedAt = new Date().toISOString();
+}
+
+function shareUrl(sh){
+  return (shareStore.baseUrl && sh.slug) ? shareStore.baseUrl + '/l/' + sh.slug : '';
+}
+// A MESMA função que a rota usa. É o que garante que a frase "12 itens
+// aparecem agora" não minta sobre o que a pessoa do outro lado vê.
+function shareItemsOf(sh){
+  return Painel.shareItems(invItems, sh, filterCtx());
+}
+function shareBaseOf(sh){
+  return filterInvItems(invItems, sh.filter, filterCtx());
+}
+function sharesOf(it){
+  return shareStore.lists.filter(sh => shareItemsOf(sh).some(x => x.id === it.id));
 }
 
 async function saveInvCategories(){
@@ -2529,8 +2723,21 @@ const CAT_SCOPES = {
     noun: (n)=> n === 1 ? 'item' : 'itens',
     orphans: 'itens órfãos',
     target: 'iCategory',
-    onRename: (oldN, newN)=>{ if(invFilters.category === oldN) invFilters.category = newN; },
-    onDelete: (cat)=>{ if(invFilters.category === cat) invFilters.category = ''; },
+    // O filtro guarda o NOME da categoria, então renomear tem que alcançar
+    // também as listas já compartilhadas: sem isto, renomear "Móveis" esvazia
+    // a lista da família em silêncio — e o link já foi mandado.
+    onRename: (oldN, newN)=>{
+      if(invFilters.category === oldN) invFilters.category = newN;
+      let mexeu = false;
+      shareStore.lists.forEach(l => { if(l.filter.category === oldN){ l.filter.category = newN; stampShare(l); mexeu = true; } });
+      if(mexeu) saveShares();
+    },
+    onDelete: (cat)=>{
+      if(invFilters.category === cat) invFilters.category = '';
+      let mexeu = false;
+      shareStore.lists.forEach(l => { if(l.filter.category === cat){ l.filter.category = ''; stampShare(l); mexeu = true; } });
+      if(mexeu) saveShares();
+    },
   },
 };
 let catScope = 'tasks';
@@ -2670,9 +2877,9 @@ let invSort = { key:'title', dir:'asc' };
 // toolbar — reatribuir a referência quebraria quem fechou sobre ela.
 const invFilters = normalizeInvFilter({});
 
-// O filtro em si mora em domain.js, junto das regras de dinheiro: quem precisar
-// resolver o mesmo filtro fora do navegador usa a mesma função, em vez de uma
-// segunda implementação que divergiria na primeira mudança de regra.
+// O filtro em si mora em domain.js: a rota que serve as listas compartilhadas
+// resolve o filtro de uma lista com a MESMA função, senão a tela e a vitrine
+// discordariam sobre quais itens uma pessoa de fora vê.
 function visibleItems(){
   return filterInvItems(invItems, invFilters, filterCtx());
 }
@@ -2762,13 +2969,16 @@ function invRowHtml(it){
   const done = isResolved(it);
   const open = openPanels.has('inv-' + it.id);
   const nCom = (it.comments || []).length;
+  const shEdit = shareEditingList();
+  const fora = shEdit ? shEdit.excluded.includes(it.id) : false;
+  const marcas = shareMarks.get(it.id) || [];
   return `
-  <tr class="inv-row dest-${d.cls}${done ? ' is-resolved' : ''}${sells ? '' : ' no-money'}" data-id="${escapeAttr(it.id)}">
+  <tr class="inv-row dest-${d.cls}${done ? ' is-resolved' : ''}${sells ? '' : ' no-money'}${shEdit && fora ? ' share-out' : ''}" data-id="${escapeAttr(it.id)}">
     <td class="c-exp"><button class="inv-exp${open ? ' open' : ''}" data-action="inv-toggle" data-id="${escapeAttr(it.id)}" title="Detalhes">▸</button></td>
     <td class="c-photo">${thumbHtml(it)}</td>
     <td class="c-name">
       <span class="inv-name">${escapeHtml(it.title)}</span>
-      <span class="inv-sub">${it.category ? `<i class="cat-dot" style="background:${colorForCategory(it.category)}"></i>${escapeHtml(it.category)}` : ''}${it.room ? ` · ${escapeHtml(it.room)}` : ''}</span>
+      <span class="inv-sub">${it.category ? `<i class="cat-dot" style="background:${colorForCategory(it.category)}"></i>${escapeHtml(it.category)}` : ''}${it.room ? ` · ${escapeHtml(it.room)}` : ''}${marcas.length ? ` · 🔗 ${escapeHtml(marcas[0])}${marcas.length > 1 ? ' +' + (marcas.length - 1) : ''}` : ''}</span>
       <span class="sm-only">${destBadge(it)}${sells ? stageBadge(it) + storyBadge(it) : ''}${riskBadge(it)}</span>
     </td>
     <td class="c-dest">${destBadge(it)}</td>
@@ -2785,10 +2995,14 @@ function invRowHtml(it){
             ? `<span class="m-pending" title="Já recebido: ${escapeAttr(fmtMoney(receivedOf(it)))}">falta ${fmtMoneyPlain(pendingOf(it))}</span>`
             : it.buyer ? `<span class="m-buyer">${escapeHtml(it.buyer)}</span>` : ''}`
       : NA}</td>
-    <td class="c-act">
+    <td class="c-act">${shEdit ? `
+      <input type="checkbox" data-action="inv-share-pick" data-id="${escapeAttr(it.id)}"
+        ${fora ? '' : 'checked'} ${isPublicItem(it) ? '' : 'disabled'}
+        title="${isPublicItem(it) ? 'Aparece na lista' : 'Não pode aparecer: só item à venda e não vendido entra'}">`
+    : `
       <button data-action="inv-edit" data-id="${escapeAttr(it.id)}" title="Editar">✎</button>
       ${sells ? `<button data-action="inv-ad" data-id="${escapeAttr(it.id)}" title="Gerar texto do anúncio">📋</button>` : '<span class="act-gap">·</span>'}
-      <button class="cm${nCom ? ' has' : ''}" data-action="inv-comments" data-id="${escapeAttr(it.id)}" title="Comentários">💬${nCom ? ' ' + nCom : ''}</button>
+      <button class="cm${nCom ? ' has' : ''}" data-action="inv-comments" data-id="${escapeAttr(it.id)}" title="Comentários">💬${nCom ? ' ' + nCom : ''}</button>`}
     </td>
   </tr>${open ? invDetailHtml(it) : ''}`;
 }
@@ -2835,6 +3049,7 @@ function invDetailHtml(it){
         ${storyAge(it) ? dtCell('Story', (storyAge(it).expired
               ? 'venceu há ' + fmtAge(storyAge(it).hours - STORY_TTL_H)
               : 'no ar há ' + fmtAge(storyAge(it).hours)) + ' · postado ' + fmtDateTime(it.storyPostedAt)) : ''}
+        ${dtCell('Listas 🔗', (shareMarks.get(it.id) || []).join(', '))}
         ${dtCell('Descrição pública 👁', it.publicNotes, null, 'wide')}
         ${dtCell('Observações 🔒', it.notes, null, 'wide')}
       </div>
@@ -2872,7 +3087,26 @@ function invDetailHtml(it){
   </tr>`;
 }
 
+// Quais listas contêm cada item, calculado uma vez por render: por item seria
+// uma varredura do inventário inteiro por linha da tabela.
+let shareMarks = new Map();
+function recomputeShareMarks(){
+  shareMarks = new Map();
+  const hoje = todayISO();
+  // Só lista no ar: a marca responde "quem está vendo este item agora". Contar
+  // lista desligada ou vencida faria o 🔗 mentir justamente quando importa.
+  shareStore.lists.filter(sh => shareStatus(sh, hoje) === 'ativa').forEach(sh => shareItemsOf(sh).forEach(it => {
+    if(!shareMarks.has(it.id)) shareMarks.set(it.id, []);
+    shareMarks.get(it.id).push(sh.name || 'sem nome');
+  }));
+}
+function shareEditingList(){
+  return shareEditing ? shareStore.lists.find(l => l.id === shareEditing) || null : null;
+}
+
 function renderInventory(){
+  recomputeShareMarks();
+  renderShareEditBar();
   renderInvChips();
   const list = sortItems(visibleItems());
   document.getElementById('invBody').innerHTML = list.length
@@ -3013,10 +3247,17 @@ document.getElementById('invSearch').addEventListener('input', (e)=>{
     render();
   });
 });
+// Empurra invFilters para os controles da toolbar. Existe porque agora o filtro
+// pode vir de fora (de uma lista de venda), e não só de quem clicou nele.
+function syncFilterInputs(){
+  document.getElementById('invSearch').value = invFilters.q || '';
+  document.getElementById('invFilterCategory').value = invFilters.category || '';
+  document.getElementById('invFilterRoom').value = invFilters.room || '';
+  document.getElementById('invFilterOwner').value = invFilters.owner || '';
+}
 document.getElementById('invClearFilters').addEventListener('click', ()=>{
   Object.assign(invFilters, normalizeInvFilter({}));
-  document.getElementById('invSearch').value = '';
-  ['invFilterCategory','invFilterRoom','invFilterOwner'].forEach(id=> document.getElementById(id).value = '');
+  syncFilterInputs();
   render();
 });
 document.getElementById('invChips').addEventListener('click', (e)=>{
@@ -3122,8 +3363,23 @@ document.addEventListener('click', async (e)=>{
   }
 });
 
-
 document.addEventListener('change', async (e)=>{
+  if(e.target.matches('input[data-action="inv-share-pick"]')){
+    const sh = shareEditingList();
+    if(!sh) return;
+    const id = e.target.dataset.id;
+    const fora = new Set(sh.excluded);
+    if(e.target.checked) fora.delete(id); else fora.add(id);
+    sh.excluded = [...fora];
+    stampShare(sh);
+    // Debounce: marcar vinte itens não são vinte requisições.
+    saveSharesSoon();
+    recomputeShareMarks();
+    renderShareEditBar();
+    const tr = e.target.closest('tr');
+    if(tr) tr.classList.toggle('share-out', !e.target.checked);
+    return;
+  }
   if(!e.target.matches('input[data-action="inv-resolve"]')) return;
   const it = invItems.find(x => x.id === e.target.dataset.id);
   if(!it) return;
@@ -3606,7 +3862,252 @@ function settlePhotos(committed){
   editingPhotosOriginal = [];
 }
 
+// ---- Modal das listas de venda ----
+function renderShareEditBar(){
+  const bar = document.getElementById('shareEditBar');
+  const sh = shareEditingList();
+  bar.classList.toggle('on', !!sh);
+  if(!sh) return;
+  document.getElementById('shareEditName').textContent = sh.name || 'sem nome';
+  const n = shareItemsOf(sh).length;
+  document.getElementById('shareEditCount').textContent = n + (n === 1 ? ' item na lista' : ' itens na lista');
+}
 
+function renderShareCount(){
+  const el = document.getElementById('shareCount');
+  if(el) el.textContent = shareStore.lists.length ? shareStore.lists.length : '';
+}
+
+function shareVisitsText(sh){
+  const h = shareHits[sh.id];
+  if(!h || !h.n) return 'nenhuma visita ainda';
+  const hoje = (h.dias || {})[todayISO()] || 0;
+  return h.n + (h.n === 1 ? ' visita' : ' visitas')
+    + (hoje ? ' · ' + hoje + ' hoje' : '')
+    + (h.ultima ? ' · última ' + fmtDateTime(h.ultima) : '');
+}
+
+function shareFilterChips(sh){
+  const f = sh.filter;
+  const chips = [];
+  if(f.destination) chips.push('destino: ' + f.destination);
+  if(f.category) chips.push('categoria: ' + f.category);
+  if(f.room) chips.push('cômodo: ' + f.room);
+  if(f.owner) chips.push('resp: ' + f.owner);
+  if(f.q) chips.push('busca: "' + f.q + '"');
+  if(!chips.length) chips.push('sem filtro — todo o inventário à venda');
+  return chips.map(c => `<span class="sh-chip">${escapeHtml(c)}</span>`).join('');
+}
+
+// A frase que faz a tela ser confiável: sai das MESMAS funções que a rota usa.
+function shareCompHtml(sh){
+  const base = shareBaseOf(sh);
+  const dentro = shareItemsOf(sh);
+  const excl = new Set(sh.excluded);
+  const vendidos = base.filter(i => i.destination === 'Vender' && i.saleStatus === 'Vendido').length;
+  const foraDestino = base.filter(i => i.destination !== 'Vender').length;
+  const excluidos = base.filter(i => excl.has(i.id) && isPublicItem(i)).length;
+  const semPreco = dentro.filter(i => i.askPrice == null).length;
+  const semFoto = dentro.filter(i => !i.photos.length).length;
+  const semDesc = dentro.filter(i => !i.publicNotes).length;
+  const partes = [`<b>${dentro.length}</b> ${dentro.length === 1 ? 'item aparece' : 'itens aparecem'} agora`];
+  if(vendidos) partes.push(`${vendidos} ${vendidos === 1 ? 'vendido saiu' : 'vendidos saíram'} sozinho${vendidos === 1 ? '' : 's'}`);
+  if(foraDestino) partes.push(`${foraDestino} fora por não ser "Vender"`);
+  if(excluidos) partes.push(`${excluidos} ${excluidos === 1 ? 'excluído' : 'excluídos'} à mão`);
+  const avisos = [];
+  if(semPreco) avisos.push(`${semPreco} sem preço (aparece como "a combinar")`);
+  if(semDesc) avisos.push(`${semDesc} sem descrição pública`);
+  if(semFoto) avisos.push(`${semFoto} sem foto`);
+  let html = partes.join(' · ');
+  if(avisos.length) html += `<br><span class="warn">⚠ ${avisos.join(' · ')}</span>`;
+  html += `<br>Item novo que casar com o filtro entra sozinho.`;
+  return html;
+}
+
+function renderShares(){
+  renderShareCount();
+  document.getElementById('shareBaseUrl').value = shareStore.baseUrl;
+  const box = document.getElementById('shareList');
+  if(!shareStore.lists.length){
+    box.innerHTML = '<p class="sh-empty">Nenhuma lista ainda. Filtre o inventário como quiser e crie a primeira aqui embaixo.</p>';
+    return;
+  }
+  const hoje = todayISO();
+  box.innerHTML = shareStore.lists.map(sh => {
+    const st = shareStatus(sh, hoje);
+    const url = shareUrl(sh);
+    const wa = Painel.waLink(sh.whatsapp, 'Teste do link da lista ' + (sh.name || ''));
+    return `
+    <div class="sh-card${st === 'ativa' ? '' : ' off'}" data-id="${escapeAttr(sh.id)}">
+      <div class="sh-head">
+        <input type="text" class="sh-name" value="${escapeAttr(sh.name)}" placeholder="Nome da lista (só você vê)" maxlength="60">
+        <span class="sh-badge ${st}">${st === 'sem-link' ? 'link quebrado' : st}</span>
+        <button class="add-btn ghost danger" data-act="del" title="Excluir lista">🗑</button>
+      </div>
+      <div class="sh-link">
+        <input type="text" readonly value="${escapeAttr(url || (sh.slug ? 'configure o endereço da vitrine acima' : 'link quebrado — gere um novo'))}">
+        <button class="add-btn ghost" data-act="copy" ${url ? '' : 'disabled title="Falta o endereço da vitrine"'}>🔗 Copiar</button>
+        ${url ? `<a class="add-btn ghost" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">abrir ↗</a>` : ''}
+      </div>
+      <div class="sh-grid">
+        <div class="field">
+          <label>WhatsApp desta lista</label>
+          <input type="text" class="sh-wa" value="${escapeAttr(sh.whatsapp)}" placeholder="5531999998888" inputmode="numeric">
+          ${wa ? `<a class="hint-pub" href="${escapeAttr(wa)}" target="_blank" rel="noopener noreferrer">testar ↗</a>` : '<span class="hint-priv">Sem número, a página não mostra o botão de interesse.</span>'}
+        </div>
+        <div class="field">
+          <label>Validade (opcional)</label>
+          <input type="date" class="sh-exp" value="${escapeAttr(sh.expiresAt || '')}">
+          <span class="hint-priv">Depois desta data o link para de abrir.</span>
+        </div>
+        <div class="field wide">
+          <label>Recado no topo da página</label>
+          <textarea class="sh-intro" rows="2" maxlength="400" placeholder="Ex: separei essas coisas para vocês verem antes">${escapeHtml(sh.intro)}</textarea>
+        </div>
+      </div>
+      <p class="sh-comp">${shareCompHtml(sh)}</p>
+      <div class="sh-chips">${shareFilterChips(sh)}</div>
+      <div class="sh-acts">
+        <label class="sh-visits"><input type="checkbox" class="sh-active" ${sh.active ? 'checked' : ''}> ligada</label>
+        <span class="sh-visits">· ${escapeHtml(shareVisitsText(sh))}</span>
+        <button class="add-btn ghost" data-act="items">✎ Editar itens</button>
+        <button class="add-btn ghost" data-act="filter">↻ Usar o filtro da tela</button>
+        <button class="add-btn ghost" data-act="reslug">🔄 Gerar novo link</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Religar os listeners depois do innerHTML, como o gerenciador de categorias faz.
+  box.querySelectorAll('.sh-card').forEach(card=>{
+    const sh = shareStore.lists.find(l => l.id === card.dataset.id);
+    if(!sh) return;
+    const campo = (sel, prop, transform) => {
+      const el = card.querySelector(sel);
+      if(!el) return;
+      el.addEventListener('input', ()=>{
+        sh[prop] = transform ? transform(el.value) : el.value;
+        stampShare(sh);
+        saveSharesSoon();
+      });
+      el.addEventListener('blur', ()=> renderShares());
+    };
+    campo('.sh-name', 'name');
+    campo('.sh-intro', 'intro');
+    campo('.sh-wa', 'whatsapp');
+    campo('.sh-exp', 'expiresAt', v => v || null);
+
+    card.querySelector('.sh-active').addEventListener('change', async (e)=>{
+      sh.active = e.target.checked;
+      stampShare(sh);
+      await saveShares();
+      renderShares();
+      toast(sh.active ? 'Lista ligada' : 'Lista desligada — o link para de abrir');
+    });
+
+    card.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', async ()=>{
+      const act = b.dataset.act;
+      if(act === 'copy'){
+        const ok = await copyText(shareUrl(sh));
+        toast(ok ? 'Link copiado ✓' : 'Não deu para copiar sozinho');
+        return;
+      }
+      if(act === 'del'){
+        if(!confirm(`Excluir a lista "${sh.name}"? O link para de funcionar para quem já recebeu.`)) return;
+        shareStore.lists = shareStore.lists.filter(l => l.id !== sh.id);
+        if(shareEditing === sh.id) shareEditing = null;
+        await saveShares();
+        renderShares();
+        render();
+        return;
+      }
+      if(act === 'reslug'){
+        if(!confirm('Gerar um endereço novo? O link que você já mandou para as pessoas para de funcionar.')) return;
+        sh.slug = newShareSlug(sh.name);
+        stampShare(sh);
+        await saveShares();
+        renderShares();
+        toast('Link novo gerado — mande o novo endereço');
+        return;
+      }
+      if(act === 'filter'){
+        sh.filter = Painel.normalizeShare({ filter: invFilters }).filter;
+        stampShare(sh);
+        await saveShares();
+        renderShares();
+        render();
+        toast('Filtro da lista atualizado');
+        return;
+      }
+      if(act === 'items'){
+        startShareEdit(sh);
+        return;
+      }
+    }));
+  });
+}
+
+function startShareEdit(sh){
+  shareEditing = sh.id;
+  // A base da lista passa a ser o que está na tela: é a tabela do inventário
+  // inteira — com busca, ordenação, foto e preço — servindo de seletor.
+  Object.assign(invFilters, normalizeInvFilter(sh.filter));
+  syncFilterInputs();
+  closeShareModal();
+  setView('inventory');
+  render();
+  toast('Desmarque na última coluna o que não deve aparecer');
+}
+
+document.getElementById('shareEditDone').addEventListener('click', async ()=>{
+  shareEditing = null;
+  clearTimeout(shareSaveTimer);
+  shareSaveTimer = null;
+  await saveShares();
+  render();
+  openShareModal();
+});
+
+document.getElementById('shareBaseUrl').addEventListener('input', (e)=>{
+  shareStore.baseUrl = e.target.value.trim().replace(/\/+$/, '');
+  saveSharesSoon();
+});
+document.getElementById('shareBaseUrl').addEventListener('blur', ()=> renderShares());
+
+function openShareModal(){
+  renderShares();
+  document.getElementById('shareBackdrop').classList.add('open');
+}
+function closeShareModal(){
+  document.getElementById('shareBackdrop').classList.remove('open');
+}
+document.getElementById('invOpenShares').addEventListener('click', openShareModal);
+document.getElementById('shareClose').addEventListener('click', closeShareModal);
+document.getElementById('shareBackdrop').addEventListener('click', (e)=>{
+  if(e.target.id === 'shareBackdrop') closeShareModal();
+});
+
+document.getElementById('shareCreate').addEventListener('click', async ()=>{
+  const nome = (prompt('Nome da lista (só vocês veem — ex: Família, Amigos do trabalho):') || '').trim();
+  if(!nome) return;
+  // O WhatsApp da última lista criada é quase sempre o mesmo: poupa digitar.
+  const ultima = shareStore.lists[shareStore.lists.length - 1];
+  const sh = normalizeShare({
+    name: nome,
+    slug: newShareSlug(nome),
+    filter: invFilters,
+    whatsapp: ultima ? ultima.whatsapp : '',
+  });
+  stampShare(sh);
+  shareStore.lists.push(sh);
+  await saveShares();
+  renderShares();
+  render();
+  const el = document.querySelector(`.sh-card[data-id="${sh.id}"] .sh-wa`);
+  if(el && !sh.whatsapp) el.focus();
+  toast(`Lista "${nome}" criada com ${shareItemsOf(sh).length} itens`);
+});
+
+// ---- Texto do anúncio ----
 // NUNCA inclui minPrice nem notes. O mínimo existe justamente para não ir para o
 // anúncio; as observações são internas ("não passa pela porta", "aceito 850") e
 // iam para o Marketplace — é por isso que existe a descrição pública.
@@ -3910,6 +4411,9 @@ setView(viewFromHash());
 loadAll();
 loadInventory();
 loadMoveDate();
+// Depois do inventário no boot só na ordem do código: a frase de composição de
+// cada lista precisa dos itens, e quem chega primeiro dispara o render de novo.
+loadShares().then(()=>{ renderShareCount(); if(activeView === 'inventory') render(); });
 </script>
 </body>
 </html>

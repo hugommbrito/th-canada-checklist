@@ -282,6 +282,168 @@ app.get('/api/snapshot', (req, res) => {
   res.json(buildSnapshot(since));
 });
 
+// ---- Vitrine pública: o que uma lista compartilhada pode ver ----
+// Esta é a fronteira do painel com a internet. Do outro lado dela existe um
+// serviço separado que renderiza a página e nunca vê o que não está aqui.
+const SHARES_KEY = 'toronto-tracker-shares';
+const HITS_KEY = 'toronto-tracker-share-hits';
+
+// Token próprio, e obrigatório. O SNAPSHOT_TOKEN destranca o painel inteiro —
+// piso de negociação, comprador, thread de negociação — e mora num agendador;
+// este mora no ambiente de um serviço exposto à internet. Se vazar, o prejuízo
+// tem que ser "alguém leu os anúncios", não "alguém leu a margem de tudo".
+// E, ao contrário do snapshot, sem a variável definida a rota NÃO abre: rota
+// consumida por serviço público não pode ter "aberta" como estado de esquecimento.
+function vitrineAuth(req) {
+  const esperado = process.env.VITRINE_TOKEN;
+  if (!esperado) return 'sem-config';
+  const dado = req.get('x-vitrine-token') || '';
+  const a = Buffer.from(String(dado));
+  const b = Buffer.from(esperado);
+  return (a.length === b.length && crypto.timingSafeEqual(a, b)) ? 'ok' : 'nao';
+}
+
+function findShare(slug) {
+  if (!D.isShareSlug(slug)) return null;   // corta lixo antes de varrer o blob
+  const store = D.normalizeShareStore(readKey(SHARES_KEY, null));
+  return store.lists.find(l => l.slug === slug) || null;
+}
+
+// Irmã de itemView(), e deliberadamente NÃO derivada dela: itemView monta o
+// registro inteiro, então um `delete` sobre o retorno dela vazaria por default
+// no dia em que o item ganhar um campo novo. Aqui a lista de campos é a
+// especificação — o que não está escrito abaixo não sai.
+// NÃO use spread, NÃO use delete, NÃO acrescente campo sem decidir que ele é público.
+function vitrineItemView(it) {
+  return {
+    id: it.id,
+    nome: it.title,
+    estado: it.condition,
+    // publicNotes, nunca notes: as observações são internas e é exatamente
+    // onde mora "aceito 850" ou "combinado com o vizinho". Sem fallback.
+    descricao: it.publicNotes || null,
+    preco: money(it.askPrice),
+    reservado: it.saleStatus === 'Reservado',
+    // Só o nome do arquivo. A vitrine é obrigada a montar a URL do proxy dela,
+    // e assim o domínio do painel não tem por onde escapar para o HTML de quem
+    // recebe o link.
+    fotos: it.photos.map(f => path.basename(f)),
+  };
+}
+
+// Apresentação de uma vitrine, não regra de negócio: reservado por último,
+// quem tem foto antes de quem não tem, mais caro primeiro, nome como desempate
+// estável — a página não pode embaralhar entre duas visitas.
+function vitrineOrder(a, b) {
+  const res = (a.saleStatus === 'Reservado') - (b.saleStatus === 'Reservado');
+  if (res) return res;
+  const foto = (b.photos.length > 0) - (a.photos.length > 0);
+  if (foto) return foto;
+  const pa = a.askPrice == null ? -1 : a.askPrice;
+  const pb = b.askPrice == null ? -1 : b.askPrice;
+  if (pa !== pb) return pb - pa;
+  return String(a.title).localeCompare(String(b.title), 'pt-BR');
+}
+
+function shareCtx() {
+  const row = getStmt.get('toronto-tracker-movedate');
+  return { moveDate: (row && row.value) || '', today: D.todayISO(TZ) };
+}
+
+function itensDaLista(share) {
+  const ctx = shareCtx();
+  const inv = readKey('toronto-tracker-inventory', []).map(D.normalizeItem);
+  return D.shareItems(inv, share, ctx).sort(vitrineOrder);
+}
+
+// Ler-modificar-gravar num blob JSON só é seguro aqui porque NÃO existe await
+// nenhum entre o get e o run: o event loop não roda no meio e o better-sqlite3
+// é síncrono. NÃO transforme esta função em async.
+function bumpHit(share) {
+  const all = readKey(HITS_KEY, {});
+  const cur = all[share.id] || { slug: share.slug, n: 0, primeira: null, ultima: null, dias: {} };
+  const agora = new Date().toISOString();
+  const dia = D.todayISO(TZ);
+  cur.slug = share.slug;
+  cur.n += 1;
+  cur.primeira = cur.primeira || agora;
+  cur.ultima = agora;
+  cur.dias[dia] = (cur.dias[dia] || 0) + 1;
+  // Aparado nos últimos 30 dias: sem isto o blob cresce para sempre.
+  cur.dias = Object.fromEntries(Object.entries(cur.dias).sort().slice(-30));
+  all[share.id] = cur;
+  setStmt.run(HITS_KEY, JSON.stringify(all), agora);
+  return cur.n;
+}
+
+// Resolve a lista e recusa o que não é público. Devolve { erro, status } ou { share }.
+function resolveShare(req, res) {
+  const auth = vitrineAuth(req);
+  if (auth === 'sem-config') { res.status(503).json({ erro: 'VITRINE_TOKEN não configurado' }); return null; }
+  if (auth !== 'ok') { res.status(401).json({ erro: 'token inválido' }); return null; }
+  res.set('Cache-Control', 'no-store');   // lista desligada tem que apagar na hora
+  const share = findShare(req.params.slug);
+  if (!share) { res.status(404).json({ erro: 'nao_encontrada' }); return null; }
+  const st = D.shareStatus(share, D.todayISO(TZ));
+  if (st !== 'ativa') {
+    // 410 e não 403: quem chamou está autorizado; o que acabou é o recurso. A
+    // rota exige token, então distinguir "vencida" de "inexistente" aqui não é
+    // oráculo para ninguém — e a página pública mostra o mesmo texto nos dois.
+    res.status(410).json({ erro: st });
+    return null;
+  }
+  return share;
+}
+
+app.get('/api/vitrine/:slug', (req, res) => {
+  const share = resolveShare(req, res);
+  if (!share) return;
+  const itens = itensDaLista(share);
+  res.json({
+    geradoEm: new Date().toISOString(),
+    lista: {
+      nome: share.name,
+      recado: share.intro || null,
+      whatsapp: share.whatsapp,
+      validade: share.expiresAt,
+    },
+    total: itens.length,
+    itens: itens.map(vitrineItemView),
+  });
+});
+
+// A visita é um POST explícito, e não efeito do GET acima, por dois motivos: a
+// vitrine tem cache (uma visita não é um fetch, e um refresh de cache não é uma
+// visita), e o preview de link do WhatsApp abre a página sozinho — quem decide
+// o que conta é quem sabe o user-agent, não o painel.
+app.post('/api/vitrine/:slug/visita', (req, res) => {
+  const share = resolveShare(req, res);
+  if (!share) return;
+  res.json({ ok: true, n: bumpHit(share) });
+});
+
+// Foto com escopo na lista: a vitrine não busca em /uploads, busca aqui. Assim
+// vender um item revoga o acesso à foto dele de graça, e o proxy nunca pode ser
+// usado para pedir um arquivo qualquer do volume.
+app.get('/api/vitrine/:slug/foto/:nome', (req, res) => {
+  const share = resolveShare(req, res);
+  if (!share) return;
+  const nome = path.basename(req.params.nome);
+  if (!UPLOAD_NAME_RE.test(nome)) return res.status(400).json({ erro: 'nome inválido' });
+  const permitidas = new Set();
+  itensDaLista(share).forEach(it => it.photos.forEach(f => permitidas.add(path.basename(f))));
+  if (!permitidas.has(nome)) return res.status(404).json({ erro: 'nao_encontrada' });
+  const ext = path.extname(nome).toLowerCase();
+  const tipo = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[ext];
+  if (!tipo) return res.status(400).json({ erro: 'nome inválido' });
+  // Cache curto, e não o 365d immutable do /uploads: aqui a URL é revogável, e
+  // um ano de cache imutável tornaria a revogação inútil para quem já visitou.
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.type(tipo);
+  res.sendFile(path.join(UPLOAD_DIR, nome));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(PORT, () => {
