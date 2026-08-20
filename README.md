@@ -164,6 +164,23 @@ apaga o arquivo, mas só depois de a mudança ter sido efetivamente gravada: se 
 falhar, o registro no banco continua apontando para aquela foto, então ela precisa
 continuar existindo. Cancelar a edição também apaga o que subiu durante ela.
 
+### Descrição pública é um campo separado
+
+O item tem dois campos de texto livre, e a diferença entre eles é a fronteira de tudo o
+que esta parte do projeto faz:
+
+- **Observações (internas)** 🔒 — "não passa pela porta da cozinha", "aceito 850 se pagar
+  hoje". Nunca sai do painel: não vai para lista compartilhada nem para o texto do anúncio.
+- **Descrição pública** 👁 — "sofá retrátil 2,10m, tecido suede, sem rasgo". É o que aparece
+  nas listas e no anúncio.
+
+Até esta etapa o texto do anúncio publicava as *observações*, o que é o mesmo tipo de
+vazamento que o preço mínimo teve o cuidado de evitar. Ele passou a usar só a descrição
+pública, e o modal do anúncio avisa quando o item tem observação interna e nenhuma
+descrição — senão o texto simplesmente encolheria sem explicação. O botão `↓` copia uma
+coisa para a outra, por item e revisável antes de salvar; nada é migrado automaticamente,
+porque migrar em silêncio seria justamente publicar o que é interno.
+
 ### Prazos
 
 O prazo de cada item é lido contra a data da mudança que o painel já guarda, em três
@@ -186,6 +203,90 @@ desfaria a exclusão para os dois, porque a gravação seguinte regravaria o ite
 Voltar para a aba também recarrega (sem polling): no celular isso acontece a cada
 desbloqueio, que é o ritmo da triagem. O que estava em digitação nos últimos instantes é
 gravado antes da recarga, não depende de sorte.
+
+## Listas de venda (a vitrine pública)
+
+Uma lista de venda é um **link próprio, por audiência**: a família vê um conjunto de itens
+antes de os amigos verem outro. Quem abre marca o que quer e cai no WhatsApp com a mensagem
+já escrita — nada é gravado do outro lado, sem formulário, sem cadastro, sem guardar dado de
+ninguém.
+
+No painel, `🔗 Listas` na barra do inventário. Cada lista tem nome (só vocês veem), um
+número de WhatsApp próprio, um recado no topo da página, validade opcional, liga/desliga e
+contador de visitas. O conteúdo é **filtro + exclusões**: o filtro que estava na tela quando
+a lista foi criada define a base, e itens pontuais saem à mão — item novo que casar com o
+filtro entra sozinho, o que a tela avisa em uma linha. Editar as exclusões acontece na
+própria tabela do inventário: a última coluna vira checkbox, com busca, foto e preço no
+lugar de sempre.
+
+Item **vendido sai da lista sozinho** e a foto dele deixa de ser servida. Item **reservado**
+continua visível, marcado, e não é selecionável. Item sem preço aparece como "a combinar" e
+o painel avisa quantos são.
+
+### Por que dois serviços
+
+A vitrine é um **segundo serviço**, com domínio próprio, e não uma página deste painel. O
+painel mora na raiz de um domínio e mostra piso de negociação, comprador e a thread de
+negociação na mesma tela; um link que circula em grupo de WhatsApp não pode estar no mesmo
+endereço que isso, porque apagar o caminho da URL é a primeira coisa que alguém curioso faz.
+
+O endereço do painel só existe no ambiente do processo da vitrine: nunca vai para o HTML,
+nem para o `<img src>` (as fotos passam por um proxy dela), nem para uma mensagem de erro. Há
+uma guarda que varre o HTML antes de responder e recusa a resposta se o host do painel
+aparecer nela.
+
+### O contrato entre os dois
+
+`GET /api/vitrine/:slug` no painel, com `X-Vitrine-Token` (só header — query string entra em
+log de proxy). A resposta é uma **allowlist escrita à mão** (`vitrineItemView` em
+`server.js`), irmã da `itemView` do snapshot e deliberadamente não derivada dela: com um
+`delete` sobre a outra, o campo que o item ganhar em 2027 vazaria por default. Sai `{ id,
+nome, estado, descricao, preco:{cents,brl}, reservado, fotos }` — e `fotos` são só nomes de
+arquivo, para a vitrine ser obrigada a montar a URL do proxy dela.
+
+Não existe `VITRINE_TOKEN` opcional: sem a variável a rota responde **503**. Ao contrário do
+snapshot, esta é consumida por um serviço exposto à internet, e "aberta por esquecimento" não
+pode ser um estado possível. Estados: 404 slug inexistente, 410 desligada ou vencida, 200 com
+lista vazia quando tudo já saiu. A página pública mostra **os mesmos bytes** para inexistente,
+desligada e vencida — distinguir criaria um oráculo de quais links existem, e "peça um link
+novo" serve para os três.
+
+Duas chaves novas no `kv_store`, e cada uma com um dono de escrita só — é o que dispensa
+fundir contador com edição:
+
+| Chave | Escreve | Lê |
+|---|---|---|
+| `toronto-tracker-shares` | só o navegador | painel e rota da vitrine |
+| `toronto-tracker-share-hits` | só o servidor | painel |
+
+### Visitas
+
+Contadas por página aberta, não por busca de dados: a vitrine tem cache, então uma visita não
+é uma requisição ao painel. Recarregar não conta duas vezes (dedup de 30 min por hash
+truncado com sal sorteado a cada processo — serve para não contar em dobro, não para
+identificar ninguém), e user-agent de robô não conta. **O preview de link do WhatsApp abre a
+página sozinho** quando alguém cola o link; ele está na lista de robôs justamente por isso.
+
+### Rodando as duas localmente
+
+```bash
+# terminal 1 — painel
+VITRINE_TOKEN=segredo-local npm start                    # :3000
+
+# terminal 2 — vitrine
+PORT=4000 VITRINE_PAINEL_URL=http://localhost:3000 \
+VITRINE_TOKEN=segredo-local VITRINE_PUBLIC_URL=http://localhost:4000 \
+npm run vitrine                                          # :4000
+```
+
+Variáveis da vitrine: `VITRINE_PAINEL_URL` e `VITRINE_TOKEN` (obrigatórias),
+`VITRINE_PUBLIC_URL` (o endereço dela mesma, para a mensagem do WhatsApp dizer de qual lista
+a pessoa veio), `VITRINE_CACHE_TTL_MS` (45s), `VITRINE_STALE_MAX_MS` (6h — por quanto tempo
+servir a lista de antes se o painel cair), `VITRINE_UPSTREAM_TIMEOUT_MS`, `VITRINE_TZ`,
+`VITRINE_DESLIGADA=1` (interruptor geral para depois da mudança, sem tocar no painel).
+
+O endereço da vitrine também precisa ser colado no campo "Endereço da vitrine" do modal de
+listas — é ele que monta o link que você copia.
 
 ## Snapshot para automação
 
@@ -289,6 +390,23 @@ Abre em `http://localhost:3000`. O banco SQLite é criado em `./data/app.db`
 O painel fica acessível pela URL pública do serviço. Não há autenticação — o link em si
 é o controle de acesso (uso combinado de ser só entre Hugo e Taís, por tempo limitado).
 
+### O segundo serviço (vitrine)
+
+5. Criar um **segundo serviço** no mesmo projeto, a partir do mesmo repositório, **sem
+   volume**.
+6. Definir o **start command** dele como `npm run vitrine` **antes de anexar domínio**. Sem
+   isso o Railway roda `npm start` e sobe um segundo painel, vazio e com banco efêmero, num
+   endereço público — falha silenciosa e feia. Conferir com `GET /healthz`, que responde
+   `{"servico":"vitrine"}`.
+7. Variáveis: `VITRINE_TOKEN` (o mesmo valor nos dois serviços), `VITRINE_PAINEL_URL` e
+   `VITRINE_PUBLIC_URL`. Para `VITRINE_PAINEL_URL`, preferir a rede privada
+   (`http://<servico-do-painel>.railway.internal:3000`): assim a URL pública do painel não
+   existe nem como variável de ambiente do serviço público.
+
+O `/healthz` da vitrine separa as duas saúdes de propósito: `ok` é sobre ela mesma, e o
+estado do painel vai num campo próprio — painel fora do ar não pode fazer o Railway
+reiniciar quem está de pé.
+
 ## O que ficou de fora deste corte
 
 Conforme o handoff original, esta etapa só migrou o storage (Claude.ai artifact → SQLite
@@ -299,4 +417,8 @@ Conforme o handoff original, esta etapa só migrou o storage (Claude.ai artifact
 - Edição de comentário já enviado (hoje só dá para excluir e escrever outro)
 - Aviso de comentário novo do outro lado (não há push nem polling — o inventário
   recarrega ao voltar para a aba, as demandas só ao recarregar a página)
-- Qualquer autenticação real, caso o link privado deixe de ser suficiente
+- Qualquer autenticação real, caso o link privado deixe de ser suficiente. As listas de
+  venda tornaram isto mais urgente: `GET/PUT /api/kv/:key` continua sem token, então quem
+  descobrir o domínio **do painel** lê (e escreve) tudo, inclusive o piso de negociação e os
+  números de WhatsApp das listas. A vitrine não piora isso — o domínio do painel não circula
+  —, mas passa a existir mais um lugar onde ele está escrito (o ambiente do segundo serviço)
