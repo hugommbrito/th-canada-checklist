@@ -80,6 +80,10 @@
     if(hours < 48) return Math.floor(hours) + 'h';
     return Math.floor(hours / 24) + 'd';
   }
+  // "Sofa" acha "Sofá"; "geladeira" acha "Geladeira Brastemp".
+  function norm(v){
+    return String(v || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  }
   function newInvId(){ return 'inv-' + Date.now() + Math.random().toString(36).slice(2,5); }
   function newReceiptId(){ return 'r-' + Date.now() + Math.random().toString(36).slice(2,6); }
   function isISODate(v){
@@ -150,7 +154,8 @@
   }
   function normalizeItem(raw){
     raw = raw || {};
-    return {
+  
+  return {
       id: raw.id || newInvId(),
       title: raw.title || '',
       category: raw.category || INV_UNCATEGORIZED,
@@ -160,6 +165,10 @@
       destination: DESTINATIONS.some(d=>d.id===raw.destination) ? raw.destination : 'A decidir',
       deadline: isISODate(raw.deadline) ? raw.deadline : null,
       notes: raw.notes || '',
+      // Vizinho de `notes` de propósito: um é interno e o outro é o que sai nos
+      // links de venda e no texto do anúncio. Lado a lado no arquivo, ninguém
+      // confunde qual é qual.
+      publicNotes: raw.publicNotes || '',
       photos: normalizePhotos(raw),
       saleStatus: SALE_STAGES.includes(raw.saleStatus) ? raw.saleStatus : 'Não anunciado',
       askPrice: toCents(raw.askPrice),
@@ -250,13 +259,53 @@
     };
   }
 
+  // ---- Filtro do inventário ----
+  // Vive aqui, e não no index.html, pelo mesmo motivo das regras de dinheiro: a
+  // rota que serve a vitrine tem de resolver o filtro de uma lista exatamente
+  // como a tela resolve o da toolbar. Duas implementações divergiriam, e a
+  // divergência apareceria como item errado na tela de um estranho.
+  const INV_FILTER_KEYS = ['q','category','room','owner','destination'];
+  function normalizeInvFilter(raw){
+    raw = raw || {};
+    return {
+      q: String(raw.q || ''),
+      category: String(raw.category || ''),
+      room: String(raw.room || ''),
+      owner: OWNERS.includes(raw.owner) ? raw.owner : '',
+      destination: DESTINATIONS.some(d => d.id === raw.destination) ? raw.destination : '',
+      risk: !!raw.risk,
+      storyOut: !!raw.storyOut,
+    };
+  }
+  // ctx = { moveDate, today }: risco depende dos dois, e no navegador eles vêm
+  // de um input e no servidor do banco — a mesma razão pela qual itemRisk
+  // recebe a data por parâmetro em vez de ir buscá-la.
+  function matchesInvFilter(it, f, ctx){
+    ctx = ctx || {};
+    const q = norm(f.q);
+    return (!f.destination || it.destination === f.destination)
+        && (!f.category    || it.category === f.category)
+        && (!f.room        || it.room === f.room)
+        && (!f.owner       || it.owner === f.owner)
+        && (!f.risk        || !!itemRisk(it, ctx.moveDate, ctx.today))
+        && (!f.storyOut    || storyExpired(it))
+        && (!q || norm(it.title).includes(q) || norm(it.publicNotes).includes(q)
+               || norm(it.notes).includes(q) || norm(it.buyer).includes(q));
+  }
+  function filterInvItems(list, f, ctx){
+    const nf = normalizeInvFilter(f);
+    return list.filter(it => matchesInvFilter(it, nf, ctx));
+  }
+
   return {
     DESTINATIONS, SALE_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
     DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS, OWNERS, TASK_STATUSES, TASK_QUEUES,
-    todayISO, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
+    INV_FILTER_KEYS,
+    norm, todayISO, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
     newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
     fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizePhotos, normalizeItem,
     isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
     itemRisk, invTotals,
+    normalizeInvFilter, matchesInvFilter, filterInvItems,
   };
 });

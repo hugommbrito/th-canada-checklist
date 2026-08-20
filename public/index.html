@@ -512,7 +512,7 @@
   /* Só campos de texto/data/select — o :not() evita esticar os checkboxes
      do editor de checklist, que são filhos de .field e viravam barras de
      largura total, esmagando o input de texto ao lado. */
-  .field input:not([type=checkbox]), .field select{
+  .field input:not([type=checkbox]), .field select, .field textarea{
     width:100%;
     padding:9px 10px;
     border-radius:7px;
@@ -522,7 +522,11 @@
     background:#fff;
     color:var(--ink);
   }
-  .field input::placeholder{color:#8d95a6;}
+  .field input::placeholder, .field textarea::placeholder{color:#8d95a6;}
+  .field textarea{resize:vertical;line-height:1.45;}
+  /* Irmã de .hint-priv (que é o 🔒 do preço mínimo): mesma tipografia, cor de
+     "isto sai daqui" em vez de "isto fica entre nós". */
+  .hint-pub{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#276a5a;margin-top:3px;}
   .cat-row{display:flex;gap:8px;}
   .cat-row select{flex:1;}
   .cat-row button{
@@ -1549,8 +1553,19 @@
     </fieldset>
 
     <div class="field">
-      <label>Observações</label>
+      <label>Descrição pública</label>
+      <div class="cat-row">
+        <textarea id="iPublicNotes" rows="2" maxlength="280"
+          placeholder="Ex: sofá retrátil 2,10m, tecido suede, sem rasgo"></textarea>
+        <button type="button" id="iPublicFromNotes" title="Copiar as observações internas para cá">↓</button>
+      </div>
+      <span class="hint-pub">👁 Aparece nas listas compartilhadas e no texto do anúncio.</span>
+    </div>
+
+    <div class="field">
+      <label>Observações (internas)</label>
       <input type="text" id="iNotes" placeholder="Ex: não passa pela porta da cozinha">
+      <span class="hint-priv">🔒 Só nós dois vemos — não vai para lista nem anúncio.</span>
     </div>
 
     <div class="modal-actions">
@@ -1563,7 +1578,7 @@
 <div class="modal-backdrop" id="adBackdrop">
   <div class="modal" style="max-width:520px;">
     <h2>Texto do anúncio</h2>
-    <p style="font-size:11px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;margin:0 0 12px;">
+    <p id="adHint" style="font-size:11px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;margin:0 0 12px;">
       Dá para ajustar antes de copiar. O preço mínimo nunca entra aqui.
     </p>
     <textarea id="adText" spellcheck="true"></textarea>
@@ -1604,10 +1619,11 @@ const INV_CATS_KEY = 'toronto-tracker-inv-categories';
 const {
   DESTINATIONS, SALE_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
   DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS,
-  daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
+  norm, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
   newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
   fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem,
   isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
+  normalizeInvFilter, filterInvItems,
 } = Painel;
 
 const todayISO = Painel.todayISO;
@@ -1617,6 +1633,9 @@ const todayISO = Painel.todayISO;
 // pontos de chamada seguem passando só o item.
 function itemRisk(it){ return Painel.itemRisk(it, moveDateValue(), todayISO()); }
 function invTotals(list){ return Painel.invTotals(list, moveDateValue(), todayISO()); }
+// O filtro do inventário também depende da data da mudança (o chip "em risco"),
+// então recebe o mesmo tratamento: o contexto é montado num lugar só.
+function filterCtx(){ return { moveDate: moveDateValue(), today: todayISO() }; }
 
 let tasks = [];
 let categories = [...DEFAULT_CATEGORIES];
@@ -2647,24 +2666,15 @@ document.getElementById('manageCatBackdrop').addEventListener('click', (e)=>{
 // ================= INVENTÁRIO: renderização =================
 
 let invSort = { key:'title', dir:'asc' };
-const invFilters = { q:'', category:'', room:'', owner:'', destination:'', risk:false, storyOut:false };
+// Continua `const` e continua sendo mutado campo a campo pelos handlers da
+// toolbar — reatribuir a referência quebraria quem fechou sobre ela.
+const invFilters = normalizeInvFilter({});
 
-// "Sofa" acha "Sofá"; "geladeira" acha "Geladeira Brastemp".
-function norm(v){
-  return String(v || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-}
-
+// O filtro em si mora em domain.js, junto das regras de dinheiro: quem precisar
+// resolver o mesmo filtro fora do navegador usa a mesma função, em vez de uma
+// segunda implementação que divergiria na primeira mudança de regra.
 function visibleItems(){
-  const q = norm(invFilters.q);
-  return invItems.filter(it =>
-    (!invFilters.destination || it.destination === invFilters.destination) &&
-    (!invFilters.category    || it.category === invFilters.category) &&
-    (!invFilters.room        || it.room === invFilters.room) &&
-    (!invFilters.owner       || it.owner === invFilters.owner) &&
-    (!invFilters.risk        || !!itemRisk(it)) &&
-    (!invFilters.storyOut    || storyExpired(it)) &&
-    (!q || norm(it.title).includes(q) || norm(it.notes).includes(q) || norm(it.buyer).includes(q))
-  );
+  return filterInvItems(invItems, invFilters, filterCtx());
 }
 
 const SORT_KEYS = {
@@ -2825,7 +2835,8 @@ function invDetailHtml(it){
         ${storyAge(it) ? dtCell('Story', (storyAge(it).expired
               ? 'venceu há ' + fmtAge(storyAge(it).hours - STORY_TTL_H)
               : 'no ar há ' + fmtAge(storyAge(it).hours)) + ' · postado ' + fmtDateTime(it.storyPostedAt)) : ''}
-        ${dtCell('Observações', it.notes, null, 'wide')}
+        ${dtCell('Descrição pública 👁', it.publicNotes, null, 'wide')}
+        ${dtCell('Observações 🔒', it.notes, null, 'wide')}
       </div>
       ${(it.receipts || []).length ? `<div class="dt-receipts">
         ${it.receipts.map(r => `<span class="dt-receipt">${escapeHtml(fmtMoney(r.amount))}<i>${r.at ? escapeHtml(fmtDateBR(r.at)) : ''}</i></span>`).join('')}
@@ -3003,9 +3014,7 @@ document.getElementById('invSearch').addEventListener('input', (e)=>{
   });
 });
 document.getElementById('invClearFilters').addEventListener('click', ()=>{
-  invFilters.q = invFilters.category = invFilters.room = invFilters.owner = invFilters.destination = '';
-  invFilters.risk = false;
-  invFilters.storyOut = false;
+  Object.assign(invFilters, normalizeInvFilter({}));
   document.getElementById('invSearch').value = '';
   ['invFilterCategory','invFilterRoom','invFilterOwner'].forEach(id=> document.getElementById(id).value = '');
   render();
@@ -3112,6 +3121,7 @@ document.addEventListener('click', async (e)=>{
     if(box) box.focus();
   }
 });
+
 
 document.addEventListener('change', async (e)=>{
   if(!e.target.matches('input[data-action="inv-resolve"]')) return;
@@ -3301,6 +3311,7 @@ function openInvModal(it, opts){
   document.getElementById('iPaymentMethod').value = it ? (it.paymentMethod || '') : '';
   document.getElementById('iStoryPostedAt').value = it ? localDateTimeValue(it.storyPostedAt) : '';
   document.getElementById('iNotes').value = it ? it.notes : '';
+  document.getElementById('iPublicNotes').value = it ? it.publicNotes : '';
   editingReceipts = it && it.receipts ? JSON.parse(JSON.stringify(it.receipts)) : [];
   document.getElementById('rcAmount').value = '';
   document.getElementById('rcDate').value = '';
@@ -3347,6 +3358,19 @@ document.getElementById('iSaleStatus').addEventListener('change', syncCondFields
   el.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); el.blur(); } });
 });
 
+// A migração dos itens antigos, que descreviam o produto no campo interno: por
+// item, explícita e revisável antes de salvar. Nunca automática — copiar sozinho
+// seria justamente o vazamento que a separação dos dois campos evita.
+document.getElementById('iPublicFromNotes').addEventListener('click', ()=>{
+  const pub = document.getElementById('iPublicNotes');
+  const notes = document.getElementById('iNotes').value.trim();
+  if(!notes){ toast('Não há observações para copiar'); return; }
+  if(pub.value.trim()){ toast('A descrição pública já tem texto — apague antes de copiar'); return; }
+  pub.value = notes.slice(0, 280);
+  pub.focus();
+  toast('Copiado — revise antes de salvar');
+});
+
 document.getElementById('invOpenAdd').addEventListener('click', ()=> openInvModal(null));
 document.getElementById('iCancel').addEventListener('click', ()=> closeInvModal(false));
 document.getElementById('invModalBackdrop').addEventListener('click', (e)=>{
@@ -3377,6 +3401,7 @@ document.getElementById('iSave').addEventListener('click', async ()=>{
     storyPostedAt: document.getElementById('iStoryPostedAt').value
       ? new Date(document.getElementById('iStoryPostedAt').value).toISOString() : null,
     notes: document.getElementById('iNotes').value.trim(),
+    publicNotes: document.getElementById('iPublicNotes').value.trim(),
     photos: editingPhotos.slice(),
   };
   if(editingInvId){
@@ -3581,14 +3606,16 @@ function settlePhotos(committed){
   editingPhotosOriginal = [];
 }
 
-// ---- Texto do anúncio ----
-// NUNCA inclui minPrice: o mínimo existe justamente para não ir para o anúncio.
+
+// NUNCA inclui minPrice nem notes. O mínimo existe justamente para não ir para o
+// anúncio; as observações são internas ("não passa pela porta", "aceito 850") e
+// iam para o Marketplace — é por isso que existe a descrição pública.
 function adText(it){
   const L = [it.title, ''];
   if(it.condition) L.push('Estado: ' + it.condition);
   if(it.askPrice != null) L.push('Valor: ' + fmtMoney(it.askPrice));
   if(it.category) L.push('Categoria: ' + it.category);
-  if(it.notes && it.notes.trim()){ L.push(''); L.push(it.notes.trim()); }
+  if(it.publicNotes && it.publicNotes.trim()){ L.push(''); L.push(it.publicNotes.trim()); }
   L.push('');
   const limit = it.deadline || moveDateValue();
   L.push(limit
@@ -3601,6 +3628,15 @@ function adText(it){
 
 function openAdModal(it){
   document.getElementById('adText').value = adText(it);
+  // Item cadastrado antes de existir descrição pública tem a descrição do
+  // produto no campo interno — que agora não sai daqui. Sem este aviso, o
+  // anúncio simplesmente perde o texto e ninguém entende por quê.
+  const faltando = !((it.publicNotes || '').trim()) && !!(it.notes || '').trim();
+  const hint = document.getElementById('adHint');
+  hint.textContent = faltando
+    ? '⚠ Este item tem observações internas que não entram aqui. Se elas descrevem o produto, passe para "Descrição pública" no item.'
+    : 'Dá para ajustar antes de copiar. O preço mínimo e as observações internas nunca entram aqui.';
+  hint.style.color = faltando ? 'var(--coral)' : 'var(--ink-soft)';
   document.getElementById('adBackdrop').classList.add('open');
 }
 document.getElementById('adClose').addEventListener('click', ()=>{

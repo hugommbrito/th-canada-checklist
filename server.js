@@ -160,7 +160,10 @@ function itemView(it, moveDate, today) {
     // diz quantas são, agora que um item pode ter várias.
     temFoto: it.photos.length > 0,
     fotos: it.photos,
+    // As duas, separadas: `observacoes` é interno e `descricaoPublica` é o que
+    // sai nas listas compartilhadas — o resumo diário pode cobrar a segunda.
     observacoes: it.notes || null,
+    descricaoPublica: it.publicNotes || null,
     venda: vende ? {
       status: it.saleStatus,
       pedido: money(it.askPrice),
