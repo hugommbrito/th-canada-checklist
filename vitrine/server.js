@@ -106,7 +106,14 @@ async function buscaNoPainel(slug) {
   });
   ultimoPainel = { ok: true, quando: new Date().toISOString() };
   if (r.status === 404 || r.status === 410) return { fim: true };
-  if (!r.ok) throw new Error('painel respondeu ' + r.status);
+  if (!r.ok) {
+    // O status vai num campo próprio para o log poder mostrá-lo: 401 (token
+    // diferente entre os dois serviços) e 503 (painel sem VITRINE_TOKEN) são
+    // problemas distintos, e ambos apareciam no log só como "Error".
+    const err = new Error('painel respondeu ' + r.status);
+    err.statusUpstream = r.status;
+    throw err;
+  }
   return { dados: await r.json() };
 }
 
@@ -180,8 +187,11 @@ async function pegaLista(slug) {
     guardaEntrada(slug, { at: Date.now(), vm, fotos, fim: false });
     return { estado: 'ok', vm, atrasado: false };
   } catch (err) {
-    ultimoPainel = { ok: false, quando: new Date().toISOString() };
-    console.error('[vitrine] painel indisponível:', err.name);
+    ultimoPainel = { ok: false, quando: new Date().toISOString(), status: err.statusUpstream || null };
+    // Só o nome do erro, ou o status: a mensagem de um fetch falho carrega o
+    // endereço do painel no `cause`, e um número não carrega nada.
+    console.error('[vitrine] painel indisponível:',
+      err.statusUpstream ? 'painel respondeu ' + err.statusUpstream : err.name);
     // Painel fora do ar: melhor a lista de meia hora atrás que uma página de
     // erro. Passado o teto, não: vender o que já foi vendido é pior.
     if (cached && !cached.fim && agora - cached.at < STALE_MAX_MS) {
@@ -337,6 +347,9 @@ app.get('/healthz', (req, res) => {
     // Nunca entra no `ok`: painel fora do ar é problema do painel, e derrubar o
     // healthcheck daqui só faria o Railway reiniciar quem está são.
     painel: ultimoPainel.ok === null ? 'ainda não consultado' : (ultimoPainel.ok ? 'ok' : 'inalcançável'),
+    // 401 = token diferente entre os serviços; 503 = painel sem VITRINE_TOKEN;
+    // null = nem chegou a responder (URL errada, painel fora, timeout).
+    painelStatus: ultimoPainel.status || null,
     painelEm: ultimoPainel.quando,
     listasEmCache: cache.size,
   });
