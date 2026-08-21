@@ -403,9 +403,35 @@ O painel fica acessível pela URL pública do serviço. Não há autenticação 
    (`http://<servico-do-painel>.railway.internal:3000`): assim a URL pública do painel não
    existe nem como variável de ambiente do serviço público.
 
+   **A porta tem que casar.** O painel escuta em `process.env.PORT || 3000`, e a Railway
+   injeta um `PORT` próprio — então o `:3000` do exemplo acima só está certo se você
+   **fixar `PORT=3000` nas variáveis do serviço do painel**. Sem fixar, o painel sobe numa
+   porta que você não escolheu, a vitrine bate na 3000 e toma recusa de conexão. O sintoma
+   é `/healthz?probe=1` respondendo `ECONNREFUSED`, e não há nada de errado com o token.
+
+   O hostname é o do serviço, não o do projeto: se o serviço do painel se chama
+   `th-canada-checklist`, o host é `th-canada-checklist.railway.internal`. A variável
+   `RAILWAY_PRIVATE_DOMAIN` do serviço do painel traz esse valor pronto. E a rede privada
+   só resolve **dentro do mesmo projeto e ambiente** — dois projetos separados dão
+   `ENOTFOUND`.
+
 O `/healthz` da vitrine separa as duas saúdes de propósito: `ok` é sobre ela mesma, e o
 estado do painel vai num campo próprio — painel fora do ar não pode fazer o Railway
 reiniciar quem está de pé.
+
+Para depurar, `?probe=1` pergunta ao painel naquele instante (um slug inexistente) e devolve
+o veredito escrito, sem depender de ter havido tráfego antes — num processo recém-subido o
+healthz sozinho responde "ainda não consultado", que é exatamente quando alguém está
+olhando. A sonda tem throttle de 10s e nunca põe o endereço do painel na resposta.
+
+| O que a sonda diz | O que corrigir |
+|---|---|
+| `painel alcançado e token aceito` | nada; se a lista não abre, o problema é a lista |
+| `VITRINE_TOKEN diferente entre os dois serviços` | igualar o token nos dois |
+| `o painel está sem VITRINE_TOKEN` | definir a variável **no painel** |
+| `ECONNREFUSED` | porta errada em `VITRINE_PAINEL_URL`, ou painel fora do ar |
+| `ENOTFOUND` | nome do serviço errado, ou serviços em projetos/ambientes diferentes |
+| `TimeoutError` | painel lento, ou rede privada sem caminho |
 
 ## O que ficou de fora deste corte
 
