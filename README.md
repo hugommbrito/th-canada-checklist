@@ -432,6 +432,13 @@ olhando. A sonda tem throttle de 10s e nunca põe o endereço do painel na respo
 | `ECONNREFUSED` | porta errada em `VITRINE_PAINEL_URL`, ou painel fora do ar |
 | `ENOTFOUND` | nome do serviço errado, ou serviços em projetos/ambientes diferentes |
 | `TimeoutError` | painel lento, ou rede privada sem caminho |
+| `configurado: false` com `painelUrl: inválida: …` | a URL não é URL — o próprio campo diz o quê |
+
+A `VITRINE_PAINEL_URL` é validada no boot, e URL malformada faz o serviço subir já
+dizendo por quê no log. Vale saber que quatro descuidos comuns caem aqui e todos davam,
+antes, o mesmo `ERR_INVALID_URL` genérico de dentro do `fetch`: **falta do `http://`**,
+**aspas em volta do valor**, **espaço no meio** e uma **referência `${{...}}` que não
+resolveu**.
 
 ## O que ficou de fora deste corte
 

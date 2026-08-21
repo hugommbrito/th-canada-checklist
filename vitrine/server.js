@@ -35,7 +35,26 @@ const CSS = fs.readFileSync(path.join(__dirname, 'vitrine.css'), 'utf8');
 const JS = fs.readFileSync(path.join(__dirname, 'vitrine.client.js'), 'utf8');
 const FAVICON = fs.readFileSync(path.join(__dirname, '..', 'public', 'favicon.svg'), 'utf8');
 
-const CONFIGURADO = !!(PAINEL && TOKEN);
+// Uma URL malformada não é "configurado": sem esta checagem o serviço sobe
+// parecendo saudável e só falha na primeira visita, com ERR_INVALID_URL vindo
+// de dentro do fetch — longe de onde o erro foi cometido.
+function motivoUrlInvalida(v) {
+  if (!v) return 'não definida';
+  if (/\s/.test(v)) return 'contém espaço — confira se o valor foi colado inteiro';
+  if (/^["']|["']$/.test(v)) return 'está entre aspas — a Railway não precisa delas, tire-as';
+  if (v.includes('${{')) return 'ficou com uma referência ${{...}} sem resolver — confira o nome do serviço na referência';
+  let u;
+  try { u = new URL(v); } catch (e) {
+    return /^https?:\/\//i.test(v)
+      ? 'não é uma URL válida'
+      : 'falta o esquema no começo — precisa começar com http:// ou https://';
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return 'o esquema tem que ser http:// ou https://';
+  if (!u.hostname) return 'não tem hostname';
+  return null;
+}
+const MOTIVO_URL = motivoUrlInvalida(PAINEL);
+const CONFIGURADO = !!(PAINEL && TOKEN && !MOTIVO_URL);
 // O host do painel, que a guarda antivazamento procura no HTML antes de responder.
 const HOST_PAINEL = (() => {
   try { return PAINEL ? new URL(PAINEL).host : ''; } catch (e) { return ''; }
@@ -356,6 +375,8 @@ const PROBE_THROTTLE_MS = 10000;
 let ultimaSonda = { em: 0, resultado: null };
 
 async function sondaPainel() {
+  if (MOTIVO_URL) return { veredito: 'VITRINE_PAINEL_URL ' + MOTIVO_URL };
+  if (!TOKEN) return { veredito: 'falta VITRINE_TOKEN neste serviço' };
   if (!CONFIGURADO) return { veredito: 'faltam VITRINE_PAINEL_URL e/ou VITRINE_TOKEN neste serviço' };
   // Throttle: /healthz é público, e sem isto viraria um jeito de fazer a
   // vitrine martelar o painel de graça.
@@ -384,6 +405,7 @@ async function sondaPainel() {
       ENOTFOUND: 'o hostname do painel não resolve — confira o nome do serviço em VITRINE_PAINEL_URL (na Railway é <nome-do-serviço>.railway.internal)',
       EAI_AGAIN: 'a resolução de DNS falhou temporariamente — se persistir, confira o hostname em VITRINE_PAINEL_URL',
       ECONNREFUSED: 'o hostname resolve, mas nada aceita conexão nessa porta — confira a PORTA em VITRINE_PAINEL_URL e se o painel está no ar',
+      ERR_INVALID_URL: 'VITRINE_PAINEL_URL não é uma URL válida — as causas comuns são falta de http:// no começo, aspas em volta do valor, espaço no meio, ou uma referência ${{...}} que não resolveu',
       ECONNRESET: 'a conexão foi cortada no meio — pode ser o painel reiniciando',
       ETIMEDOUT: 'a conexão não completou — rede privada indisponível entre os dois serviços, ou porta errada',
       CERT_HAS_EXPIRED: 'certificado do painel expirado',
@@ -412,6 +434,8 @@ app.get('/healthz', ac(async (req, res) => {
     servico: 'vitrine',
     ok: CONFIGURADO && !DESLIGADA,
     configurado: CONFIGURADO,
+    // O motivo, quando há: sem isto "configurado: false" não diz o que corrigir.
+    painelUrl: MOTIVO_URL ? 'inválida: ' + MOTIVO_URL : 'ok',
     desligada: DESLIGADA,
     sonda,
     // Nunca entra no `ok`: painel fora do ar é problema do painel, e derrubar o
@@ -443,5 +467,6 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`[vitrine] no ar na porta ${PORT} · painel: ${CONFIGURADO ? 'configurado' : 'NÃO CONFIGURADO'} · ttl: ${Math.round(TTL_MS / 1000)}s${DESLIGADA ? ' · DESLIGADA' : ''}`);
-  if (!CONFIGURADO) console.error('[vitrine] faltam VITRINE_PAINEL_URL e/ou VITRINE_TOKEN — nenhuma lista vai abrir');
+  if (MOTIVO_URL) console.error('[vitrine] VITRINE_PAINEL_URL ' + MOTIVO_URL + ' — nenhuma lista vai abrir');
+  else if (!TOKEN) console.error('[vitrine] falta VITRINE_TOKEN — nenhuma lista vai abrir');
 });
