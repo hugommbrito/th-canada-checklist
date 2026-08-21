@@ -335,15 +335,58 @@ app.get('/robots.txt', (req, res) => {
   res.type('text/plain').send('User-agent: *\nDisallow: /\n');
 });
 
+// Sonda opcional do painel. O /healthz sozinho só sabe da última conversa que
+// aconteceu, e num processo recém-subido isso é "nenhuma" — que é justamente
+// quando alguém está olhando. A sonda pergunta na hora, com um slug que não
+// existe: o status da resposta distingue os quatro modos de falha sem depender
+// de ter havido tráfego antes.
+const PROBE_SLUG = 'probe-inexistente-000000000000';
+const PROBE_THROTTLE_MS = 10000;
+let ultimaSonda = { em: 0, resultado: null };
+
+async function sondaPainel() {
+  if (!CONFIGURADO) return { veredito: 'faltam VITRINE_PAINEL_URL e/ou VITRINE_TOKEN neste serviço' };
+  // Throttle: /healthz é público, e sem isto viraria um jeito de fazer a
+  // vitrine martelar o painel de graça.
+  if (ultimaSonda.resultado && Date.now() - ultimaSonda.em < PROBE_THROTTLE_MS) {
+    return Object.assign({}, ultimaSonda.resultado, { deCache: true });
+  }
+  let r;
+  try {
+    const up = await fetch(`${PAINEL}/api/vitrine/${PROBE_SLUG}`, {
+      headers: { 'X-Vitrine-Token': TOKEN },
+      redirect: 'error',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const veredito =
+      up.status === 404 || up.status === 410 ? 'ok: painel alcançado e token aceito'
+      : up.status === 401 ? 'VITRINE_TOKEN diferente entre os dois serviços'
+      : up.status === 503 ? 'o painel está sem VITRINE_TOKEN'
+      : 'o painel respondeu ' + up.status + ', que não era esperado aqui';
+    r = { status: up.status, veredito };
+  } catch (err) {
+    // Só o nome: a mensagem de um fetch falho carrega o endereço do painel.
+    r = { status: null, erro: err.name, veredito: err.name === 'TimeoutError'
+      ? 'o painel não respondeu dentro do tempo limite'
+      : 'não foi possível conectar ao painel — confira VITRINE_PAINEL_URL, e se o painel está no ar' };
+  }
+  ultimaSonda = { em: Date.now(), resultado: r };
+  return r;
+}
+
 // O "servico" existe para pegar o erro de deploy mais provável: o Railway rodar
 // `npm start` neste serviço e subir um segundo painel, vazio, num endereço
 // público. Confira isto antes de mandar qualquer link.
-app.get('/healthz', (req, res) => {
+app.get('/healthz', ac(async (req, res) => {
+  // ?probe=1 pergunta ao painel agora. Sem ele, o healthz continua sendo o
+  // relatório barato de sempre, que não gera tráfego nenhum.
+  const sonda = req.query.probe ? await sondaPainel() : null;
   res.set('Cache-Control', 'no-store').json({
     servico: 'vitrine',
     ok: CONFIGURADO && !DESLIGADA,
     configurado: CONFIGURADO,
     desligada: DESLIGADA,
+    sonda,
     // Nunca entra no `ok`: painel fora do ar é problema do painel, e derrubar o
     // healthcheck daqui só faria o Railway reiniciar quem está são.
     painel: ultimoPainel.ok === null ? 'ainda não consultado' : (ultimoPainel.ok ? 'ok' : 'inalcançável'),
@@ -351,9 +394,11 @@ app.get('/healthz', (req, res) => {
     // null = nem chegou a responder (URL errada, painel fora, timeout).
     painelStatus: ultimoPainel.status || null,
     painelEm: ultimoPainel.quando,
+    // Zero num processo recém-subido não quer dizer que algo esteja errado:
+    // quer dizer que ninguém abriu lista ainda. Daí a sonda.
     listasEmCache: cache.size,
   });
-});
+}));
 
 // Raiz e qualquer outra coisa: a mesma página de link inválido. Nada aqui conta
 // que existe um painel, nem quantas listas existem.
