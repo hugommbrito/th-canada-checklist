@@ -187,11 +187,15 @@ async function pegaLista(slug) {
     guardaEntrada(slug, { at: Date.now(), vm, fotos, fim: false });
     return { estado: 'ok', vm, atrasado: false };
   } catch (err) {
-    ultimoPainel = { ok: false, quando: new Date().toISOString(), status: err.statusUpstream || null };
-    // Só o nome do erro, ou o status: a mensagem de um fetch falho carrega o
-    // endereço do painel no `cause`, e um número não carrega nada.
+    const codigo = codigoDoErro(err);
+    ultimoPainel = {
+      ok: false, quando: new Date().toISOString(),
+      status: err.statusUpstream || null, codigo,
+    };
+    // Nome e código, nunca a mensagem — ver a nota em sondaPainel().
     console.error('[vitrine] painel indisponível:',
-      err.statusUpstream ? 'painel respondeu ' + err.statusUpstream : err.name);
+      err.statusUpstream ? 'painel respondeu ' + err.statusUpstream
+        : err.name + (codigo ? ' (' + codigo + ')' : ''));
     // Painel fora do ar: melhor a lista de meia hora atrás que uma página de
     // erro. Passado o teto, não: vender o que já foi vendido é pior.
     if (cached && !cached.fim && agora - cached.at < STALE_MAX_MS) {
@@ -340,6 +344,13 @@ app.get('/robots.txt', (req, res) => {
 // quando alguém está olhando. A sonda pergunta na hora, com um slug que não
 // existe: o status da resposta distingue os quatro modos de falha sem depender
 // de ter havido tráfego antes.
+// Só código de texto (ENOTFOUND, ECONNREFUSED...). DOMException carrega um
+// `code` numérico legado — 23 para timeout — que não informa nada a quem lê.
+function codigoDoErro(err) {
+  const c = (err && err.cause && err.cause.code) || (err && err.code) || null;
+  return typeof c === 'string' && c ? c : null;
+}
+
 const PROBE_SLUG = 'probe-inexistente-000000000000';
 const PROBE_THROTTLE_MS = 10000;
 let ultimaSonda = { em: 0, resultado: null };
@@ -365,10 +376,26 @@ async function sondaPainel() {
       : 'o painel respondeu ' + up.status + ', que não era esperado aqui';
     r = { status: up.status, veredito };
   } catch (err) {
-    // Só o nome: a mensagem de um fetch falho carrega o endereço do painel.
-    r = { status: null, erro: err.name, veredito: err.name === 'TimeoutError'
-      ? 'o painel não respondeu dentro do tempo limite'
-      : 'não foi possível conectar ao painel — confira VITRINE_PAINEL_URL, e se o painel está no ar' };
+    // Nome e código do erro, nunca a mensagem: a de um fetch falho carrega o
+    // endereço do painel no `cause`. Um código como ENOTFOUND não carrega
+    // endereço nenhum, e é ele que separa "nome errado" de "porta errada".
+    const codigo = codigoDoErro(err);
+    const porCodigo = {
+      ENOTFOUND: 'o hostname do painel não resolve — confira o nome do serviço em VITRINE_PAINEL_URL (na Railway é <nome-do-serviço>.railway.internal)',
+      EAI_AGAIN: 'a resolução de DNS falhou temporariamente — se persistir, confira o hostname em VITRINE_PAINEL_URL',
+      ECONNREFUSED: 'o hostname resolve, mas nada aceita conexão nessa porta — confira a PORTA em VITRINE_PAINEL_URL e se o painel está no ar',
+      ECONNRESET: 'a conexão foi cortada no meio — pode ser o painel reiniciando',
+      ETIMEDOUT: 'a conexão não completou — rede privada indisponível entre os dois serviços, ou porta errada',
+      CERT_HAS_EXPIRED: 'certificado do painel expirado',
+    };
+    r = {
+      status: null,
+      erro: err.name,
+      codigo,
+      veredito: err.name === 'TimeoutError'
+        ? 'o painel não respondeu dentro do tempo limite'
+        : (porCodigo[codigo] || 'não foi possível conectar ao painel — confira VITRINE_PAINEL_URL, e se o painel está no ar'),
+    };
   }
   ultimaSonda = { em: Date.now(), resultado: r };
   return r;
@@ -393,6 +420,8 @@ app.get('/healthz', ac(async (req, res) => {
     // 401 = token diferente entre os serviços; 503 = painel sem VITRINE_TOKEN;
     // null = nem chegou a responder (URL errada, painel fora, timeout).
     painelStatus: ultimoPainel.status || null,
+    // ENOTFOUND = hostname errado; ECONNREFUSED = porta errada ou painel fora.
+    painelCodigo: ultimoPainel.codigo || null,
     painelEm: ultimoPainel.quando,
     // Zero num processo recém-subido não quer dizer que algo esteja errado:
     // quer dizer que ninguém abriu lista ainda. Daí a sonda.
