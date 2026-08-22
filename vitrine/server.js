@@ -54,6 +54,23 @@ function motivoUrlInvalida(v) {
   return null;
 }
 const MOTIVO_URL = motivoUrlInvalida(PAINEL);
+
+// Aviso, não erro: a URL é válida, mas quase certamente aponta para o lugar
+// errado. Host de rede privada da Railway sem porta explícita significa porta
+// 80, e nenhum serviço da Railway escuta em 80 — o app escuta na PORT dele.
+// Não é fatal porque alguém pode, em teoria, ter posto o painel atrás de um
+// proxy na 80; é aviso porque nas nossas mãos isso nunca foi verdade.
+const AVISO_PORTA = (() => {
+  if (MOTIVO_URL) return null;
+  try {
+    const u = new URL(PAINEL);
+    if (!/\.railway\.internal$/i.test(u.hostname)) return null;
+    if (u.port) return null;
+    return 'VITRINE_PAINEL_URL não tem porta, então vai para a 80 — na rede privada da '
+      + 'Railway o painel escuta na PORT dele (3000 se você não definiu nenhuma). '
+      + 'Acrescente :3000 no fim da URL.';
+  } catch (e) { return null; }
+})();
 const CONFIGURADO = !!(PAINEL && TOKEN && !MOTIVO_URL);
 // O host do painel, que a guarda antivazamento procura no HTML antes de responder.
 const HOST_PAINEL = (() => {
@@ -414,10 +431,11 @@ async function sondaPainel() {
     const porCodigo = {
       ENOTFOUND: 'o hostname do painel não resolve — confira o nome do serviço em VITRINE_PAINEL_URL (na Railway é <nome-do-serviço>.railway.internal)',
       EAI_AGAIN: 'a resolução de DNS falhou temporariamente — se persistir, confira o hostname em VITRINE_PAINEL_URL',
-      ECONNREFUSED: 'o hostname resolve, mas nada aceita conexão na porta '
-        + (ALVO ? ALVO.porta : '?') + '. Na Railway o painel escuta na PORT que ela injeta, '
-        + 'que não é 3000 por padrão: compare esta porta com a variável PORT do serviço do painel '
-        + '(ou fixe PORT=3000 nele)',
+      ECONNREFUSED: AVISO_PORTA
+        ? 'o hostname resolve, mas nada aceita conexão na porta 80. ' + AVISO_PORTA
+        : 'o hostname resolve, mas nada aceita conexão na porta '
+          + (ALVO ? ALVO.porta : '?') + '. Compare esta porta com a PORT do serviço do painel '
+          + '(se ele não define PORT, escuta na 3000)',
       ERR_INVALID_URL: 'VITRINE_PAINEL_URL não é uma URL válida — as causas comuns são falta de http:// no começo, aspas em volta do valor, espaço no meio, ou uma referência ${{...}} que não resolveu',
       ECONNRESET: 'a conexão foi cortada no meio — pode ser o painel reiniciando',
       ETIMEDOUT: 'a conexão não completou — rede privada indisponível entre os dois serviços, ou porta errada',
@@ -452,6 +470,7 @@ app.get('/healthz', ac(async (req, res) => {
     // Sem o hostname, de propósito: ver a nota em ALVO.
     painelEsquema: ALVO ? ALVO.esquema : null,
     painelPorta: ALVO ? ALVO.porta : null,
+    aviso: AVISO_PORTA,
     desligada: DESLIGADA,
     sonda,
     // Nunca entra no `ok`: painel fora do ar é problema do painel, e derrubar o
@@ -485,4 +504,5 @@ app.listen(PORT, () => {
   console.log(`[vitrine] no ar na porta ${PORT} · painel: ${CONFIGURADO ? 'configurado' : 'NÃO CONFIGURADO'} · ttl: ${Math.round(TTL_MS / 1000)}s${DESLIGADA ? ' · DESLIGADA' : ''}`);
   if (MOTIVO_URL) console.error('[vitrine] VITRINE_PAINEL_URL ' + MOTIVO_URL + ' — nenhuma lista vai abrir');
   else if (!TOKEN) console.error('[vitrine] falta VITRINE_TOKEN — nenhuma lista vai abrir');
+  if (AVISO_PORTA) console.error('[vitrine] ATENÇÃO: ' + AVISO_PORTA);
 });
