@@ -1830,6 +1830,11 @@ function nextInvOrder(){
 }
 
 let invBaseline = '';
+// Inventário já veio do servidor nesta sessão? Flag explícita, e não
+// `invItems.length`: inventário vazio é um estado legítimo, e confundir os dois
+// é justamente o que fazia o saveShares() podar exclusão contra uma lista que
+// ainda não tinha carregado. Só uma carga bem-sucedida liga isto.
+let invLoaded = false;
 
 async function loadInventory(opts){
   const silent = opts && opts.silent;
@@ -1847,6 +1852,7 @@ async function loadInventory(opts){
     // em debounce, ou uma gravação em vôo. Aqui funde, como no save.
     invItems = silent ? mergeInventory(remote, invItems) : remote;
     invBaseline = rawStr;
+    invLoaded = true;
   }catch(e){
     console.error('Erro ao carregar inventário', e);
     // Sem isso a tela diz "nenhum item" — alarmante e falso numa conexão ruim.
@@ -1965,8 +1971,16 @@ async function saveShares(){
       if(!shareStore.baseUrl) shareStore.baseUrl = r.baseUrl;
     }
     // Id que não existe mais no inventário não precisa continuar na exclusão.
-    const vivos = new Set(invItems.map(i => i.id));
-    shareStore.lists.forEach(l => { l.excluded = l.excluded.filter(id => vivos.has(id)); });
+    // Só com o inventário carregado, e este `if` é a correção de um bug real:
+    // as cargas do boot são concorrentes, e quando loadShares() chegava antes
+    // de loadInventory() esta poda rodava com invItems = [], zerando o
+    // `excluded` de TODAS as listas. O efeito era silencioso e público — item
+    // escondido à mão voltava a aparecer na página de quem tem o link. Poda é
+    // faxina opcional; perder exclusão é vazamento. Na dúvida, não poda.
+    if(invLoaded){
+      const vivos = new Set(invItems.map(i => i.id));
+      shareStore.lists.forEach(l => { l.excluded = l.excluded.filter(id => vivos.has(id)); });
+    }
     const payload = JSON.stringify(shareStore);
     await kvSet(SHARES_KEY, payload);
     sharesBaseline = payload;
