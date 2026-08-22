@@ -347,6 +347,14 @@
     // item entrando na lista porque o story dele venceu. Ninguém pediu isso.
     f.risk = false;
     f.storyOut = false;
+    // Destino também não: vitrine é sempre "Vender", e isPublicItem já garante
+    // isso. Guardá-lo não acrescenta nada e cria uma armadilha silenciosa —
+    // criar a lista com o chip "A decidir" (ou "Levar", ou "Doar") ativo salva
+    // um filtro que só admite itens que o isPublicItem depois recusa, e a
+    // lista nasce vazia PARA SEMPRE, com o link abrindo normalmente. As duas
+    // condições são mutuamente exclusivas, então o conjunto é vazio por
+    // construção. Zerar aqui é o que impede a combinação de existir.
+    f.destination = '';
     return f;
   }
   function normalizeShare(raw){
