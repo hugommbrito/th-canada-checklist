@@ -60,6 +60,16 @@ const HOST_PAINEL = (() => {
   try { return PAINEL ? new URL(PAINEL).host : ''; } catch (e) { return ''; }
 })();
 
+// Esquema e porta do alvo, sem o hostname. Porta sozinha não identifica ninguém,
+// e é o dado que fecha o diagnóstico de ECONNREFUSED: dá para comparar com a
+// PORT do painel sem precisar abrir a variável para conferir o que ela diz.
+const ALVO = (() => {
+  try {
+    const u = new URL(PAINEL);
+    return { esquema: u.protocol.replace(':', ''), porta: u.port || (u.protocol === 'https:' ? '443' : '80') };
+  } catch (e) { return null; }
+})();
+
 // Mesma forma de nome que o painel gera (server.js, UPLOAD_NAME_RE). Estrita de
 // propósito: o PHOTO_PATH_RE do domain.js aceita "..", inofensivo como src no
 // painel e não aqui.
@@ -404,7 +414,10 @@ async function sondaPainel() {
     const porCodigo = {
       ENOTFOUND: 'o hostname do painel não resolve — confira o nome do serviço em VITRINE_PAINEL_URL (na Railway é <nome-do-serviço>.railway.internal)',
       EAI_AGAIN: 'a resolução de DNS falhou temporariamente — se persistir, confira o hostname em VITRINE_PAINEL_URL',
-      ECONNREFUSED: 'o hostname resolve, mas nada aceita conexão nessa porta — confira a PORTA em VITRINE_PAINEL_URL e se o painel está no ar',
+      ECONNREFUSED: 'o hostname resolve, mas nada aceita conexão na porta '
+        + (ALVO ? ALVO.porta : '?') + '. Na Railway o painel escuta na PORT que ela injeta, '
+        + 'que não é 3000 por padrão: compare esta porta com a variável PORT do serviço do painel '
+        + '(ou fixe PORT=3000 nele)',
       ERR_INVALID_URL: 'VITRINE_PAINEL_URL não é uma URL válida — as causas comuns são falta de http:// no começo, aspas em volta do valor, espaço no meio, ou uma referência ${{...}} que não resolveu',
       ECONNRESET: 'a conexão foi cortada no meio — pode ser o painel reiniciando',
       ETIMEDOUT: 'a conexão não completou — rede privada indisponível entre os dois serviços, ou porta errada',
@@ -436,6 +449,9 @@ app.get('/healthz', ac(async (req, res) => {
     configurado: CONFIGURADO,
     // O motivo, quando há: sem isto "configurado: false" não diz o que corrigir.
     painelUrl: MOTIVO_URL ? 'inválida: ' + MOTIVO_URL : 'ok',
+    // Sem o hostname, de propósito: ver a nota em ALVO.
+    painelEsquema: ALVO ? ALVO.esquema : null,
+    painelPorta: ALVO ? ALVO.porta : null,
     desligada: DESLIGADA,
     sonda,
     // Nunca entra no `ok`: painel fora do ar é problema do painel, e derrubar o
