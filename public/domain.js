@@ -47,6 +47,11 @@
   // Só caminho do nosso próprio /uploads: é o que fecha 'javascript:' e 'data:'
   // antes de a URL virar src de um <img> na tabela.
   const PHOTO_PATH_RE = /^\/uploads\/[\w.\-]+$/;
+  // Sugestão de IA gravada no item: quanto o modelo confia no preço, e quantos
+  // anúncios comparáveis vale guardar. O teto existe pelo mesmo motivo do de
+  // fotos — tudo vai no blob único do kv_store.
+  const AI_CONFIDENCES = ['alta','media','baixa'];
+  const AI_MAX_COMPARABLES = 8;
   const OWNERS = ['Hugo','Taís','Ambos'];
   const TASK_STATUSES = ['A fazer','Em andamento','Concluído'];
   const TASK_QUEUES = [
@@ -169,6 +174,39 @@
     }
     return out.slice(0, MAX_PHOTOS);
   }
+  // ---- Sugestão de IA ----
+  // 🔒 Privada: fica gravada no item para a negociação (preço de referência,
+  // links dos anúncios comparáveis), mas NÃO entra em vitrineItemView nem em
+  // itemView (server.js) — as duas são allowlists, então basta não acrescentar.
+  // Normalizada aqui, uma vez, para quem desenha o painel poder confiar no
+  // valor: a URL vira href de <a>, o texto vira innerHTML escapado.
+  function aiText(v, max){ return typeof v === 'string' ? v.trim().slice(0, max) : ''; }
+  // Só http(s): é o que fecha 'javascript:' antes de a URL virar link clicável.
+  function aiUrl(v){ return (typeof v === 'string' && /^https?:\/\/\S+$/i.test(v)) ? v.slice(0, 500) : ''; }
+  function aiCents(v){ const c = toCents(v); return c != null && c >= 0 ? c : null; }
+  function normalizeAiSuggestion(raw){
+    if(!raw || typeof raw !== 'object') return null;
+    const faixa = (raw.faixaUsadoCents && typeof raw.faixaUsadoCents === 'object') ? raw.faixaUsadoCents : {};
+    const comps = Array.isArray(raw.comparaveis) ? raw.comparaveis : [];
+    return {
+      geradaEm: isISODateTime(raw.geradaEm) ? raw.geradaEm : new Date().toISOString(),
+      titulo: aiText(raw.titulo, 80),
+      descricaoPublica: aiText(raw.descricaoPublica, 280),
+      categoriaSugerida: aiText(raw.categoriaSugerida, 40),
+      precoNovoCents: aiCents(raw.precoNovoCents),
+      faixaUsadoCents: { min: aiCents(faixa.min), max: aiCents(faixa.max) },
+      precoSugeridoCents: aiCents(raw.precoSugeridoCents),
+      confianca: AI_CONFIDENCES.includes(raw.confianca) ? raw.confianca : 'baixa',
+      justificativa: aiText(raw.justificativa, 800),
+      comparaveis: comps.slice(0, AI_MAX_COMPARABLES).map(c => ({
+        titulo: aiText(c && c.titulo, 120),
+        precoCents: aiCents(c && c.precoCents),
+        fonte: aiText(c && c.fonte, 40),
+        url: aiUrl(c && c.url),
+        estado: ['novo','usado'].includes(c && c.estado) ? c.estado : 'desconhecido',
+      })).filter(c => c.titulo || c.url),
+    };
+  }
   function normalizeItem(raw){
     raw = raw || {};
     return {
@@ -186,6 +224,8 @@
       // confunde qual é qual.
       publicNotes: raw.publicNotes || '',
       photos: normalizePhotos(raw),
+      // 🔒 Ver normalizeAiSuggestion: privada, e fora das allowlists do servidor.
+      aiSuggestion: normalizeAiSuggestion(raw.aiSuggestion),
       saleStatus: SALE_STAGES.includes(raw.saleStatus) ? raw.saleStatus : 'Não anunciado',
       askPrice: toCents(raw.askPrice),
       minPrice: toCents(raw.minPrice),
@@ -440,6 +480,7 @@
     norm, todayISO, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
     newInvId, newReceiptId, newShareId, isISODate, isISODateTime, parseMoney, toCents,
     fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizePhotos, normalizeItem,
+    normalizeAiSuggestion,
     isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
     itemRisk, invTotals,
     normalizeInvFilter, matchesInvFilter, filterInvItems,

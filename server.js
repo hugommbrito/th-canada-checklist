@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
+const Anthropic = require('@anthropic-ai/sdk');
 // Mesmas regras que o navegador usa — ver o cabeçalho de public/domain.js.
 const D = require('./public/domain.js');
 
@@ -65,6 +66,9 @@ const EXT_BY_TYPE = {
   'image/webp': '.webp',
 };
 const UPLOAD_NAME_RE = /^inv-\d+-[0-9a-f]{8}\.(jpg|png|webp)$/i;
+// O inverso de EXT_BY_TYPE, para quem lê um arquivo do disco e precisa dizer o
+// tipo dele: a rota de foto da vitrine e a sugestão com IA.
+const TYPE_BY_EXT = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 
 // Upload sem multipart e sem multer: o cliente já reduz a imagem no canvas e
 // manda o binário cru como corpo, então express.raw() entrega um Buffer pronto.
@@ -443,7 +447,7 @@ app.get('/api/vitrine/:slug/foto/:nome', (req, res) => {
   itensDaLista(share).forEach(it => it.photos.forEach(f => permitidas.add(path.basename(f))));
   if (!permitidas.has(nome)) return res.status(404).json({ erro: 'nao_encontrada' });
   const ext = path.extname(nome).toLowerCase();
-  const tipo = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[ext];
+  const tipo = TYPE_BY_EXT[ext];
   if (!tipo) return res.status(400).json({ erro: 'nome inválido' });
   // Cache curto, e não o 365d immutable do /uploads: aqui a URL é revogável, e
   // um ano de cache imutável tornaria a revogação inútil para quem já visitou.
@@ -453,8 +457,244 @@ app.get('/api/vitrine/:slug/foto/:nome', (req, res) => {
   res.sendFile(path.join(UPLOAD_DIR, nome));
 });
 
+// ---- Sugestão com IA (privada ao painel) ----
+// Foto + nome mínimo entram; título, descrição pública, faixa de preço e
+// anúncios comparáveis saem. A chamada é daqui, nunca do navegador: a chave
+// não pode morar num HTML sem login. E o que vai para o modelo é só o que já
+// é público por construção — nome, categoria, estado, descrição pública e as
+// fotos. Piso e observações internas não entram nem no prompt.
+const IA_CHAVE = String(process.env.ANTHROPIC_API_KEY || '').trim();
+const IA_ATIVA = !!IA_CHAVE;
+const IA_MODELO = 'claude-opus-5-5';
+// Teto diário: o painel não tem login, então uma URL vazada não pode virar
+// conta aberta na Anthropic. Contado em memória, por dia de São Paulo —
+// reiniciar o processo zera, e tudo bem: é freio, não contabilidade.
+const IA_LIMITE_DIA = (() => {
+  const n = Number(process.env.IA_LIMITE_DIA);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 40;
+})();
+const IA_MAX_EM_VOO = 2;
+// ~1,3k tokens por foto de 1280px; a capa vai primeiro, e quatro bastam para
+// identificar marca, modelo e estado.
+const IA_MAX_FOTOS = 4;
+// O SDK conta o timeout em milissegundos. maxRetries 1: cada tentativa é
+// dinheiro, e o navegador já oferece o "Refazer".
+const ia = IA_ATIVA ? new Anthropic({ apiKey: IA_CHAVE, timeout: 180000, maxRetries: 1 }) : null;
+
+let iaDia = D.todayISO(TZ), iaUsadas = 0, iaEmVoo = 0;
+function iaUsadasHoje() {
+  const hoje = D.todayISO(TZ);
+  if (hoje !== iaDia) { iaDia = hoje; iaUsadas = 0; }
+  return iaUsadas;
+}
+
+const IA_SISTEMA = `Você ajuda um casal no Brasil a vender objetos usados de casa, rápido, antes de se mudar para o Canadá. Os anúncios vão para OLX, Mercado Livre, Enjoei, Facebook Marketplace e grupos de WhatsApp.
+
+Regras:
+1. Pesquise na internet preços ATUAIS no Brasil, em reais: anúncios de USADO do mesmo produto (ou equivalente próximo) e, se possível, o preço de um exemplar NOVO no varejo. Prefira OLX, Mercado Livre, Enjoei e lojas brasileiras.
+2. Não invente nada. Só cite preços e URLs que apareceram nos resultados da busca. Se não encontrou referência, devolva comparaveis vazio, confianca "baixa" e precoSugeridoReais null quando não houver base alguma. Diga na justificativa o que não foi possível confirmar.
+3. Use as fotos para identificar marca, modelo, tamanho, material e estado visível. Se a foto contradiz o texto, confie na foto e avise na justificativa.
+4. O preço sugerido é para vender em poucas semanas, não para maximizar: parta dos anúncios de usado encontrados, ajuste pelo estado informado (Novo, Ótimo, Bom, Usado) e fique um pouco abaixo da mediana dos anúncios semelhantes. Sem anúncio de usado, use de 35% a 55% do preço de novo como referência, e diga que foi assim.
+5. Responda em português do Brasil, com valores em reais inteiros. descricaoPublica tem no máximo 280 caracteres, sem preço e sem prazo; titulo tem até 60 caracteres.`;
+
+// Saída estruturada: a API garante o formato, e o que ela não garante (tamanho
+// de texto, valor mínimo) vai na description e no prompt. Preço pode ser null
+// de propósito — obrigar um inteiro forçaria o modelo a inventar.
+const IA_INT_OU_NULL = { anyOf: [{ type: 'integer' }, { type: 'null' }] };
+function iaSchema(categorias) {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['titulo', 'descricaoPublica', 'categoriaSugerida', 'precoNovoReais', 'faixaUsadoReais',
+      'precoSugeridoReais', 'confianca', 'justificativa', 'comparaveis'],
+    properties: {
+      titulo: { type: 'string', description: 'Título de anúncio, até 60 caracteres, com marca e modelo quando identificáveis.' },
+      descricaoPublica: { type: 'string', description: 'Texto do anúncio em pt-BR, NO MÁXIMO 280 caracteres, sem preço, sem prazo, sem emoji; só características verificáveis (marca, modelo, medidas, material, estado).' },
+      categoriaSugerida: { type: 'string', enum: categorias },
+      precoNovoReais: { ...IA_INT_OU_NULL, description: 'Preço de um exemplar novo no varejo brasileiro hoje, em reais inteiros; null se não encontrou.' },
+      faixaUsadoReais: {
+        type: 'object', additionalProperties: false, required: ['min', 'max'],
+        properties: { min: IA_INT_OU_NULL, max: IA_INT_OU_NULL },
+        description: 'Faixa observada em anúncios de usado no Brasil, em reais inteiros; min e max null se não encontrou.',
+      },
+      precoSugeridoReais: { ...IA_INT_OU_NULL, description: 'Preço pedido sugerido para vender em poucas semanas, em reais inteiros, já descontado o estado informado; null se não há base nenhuma.' },
+      confianca: { type: 'string', enum: ['alta', 'media', 'baixa'] },
+      justificativa: { type: 'string', description: '2 a 4 frases em pt-BR: de onde saiu o preço, o que pesou (estado, urgência) e o que NÃO foi possível confirmar.' },
+      comparaveis: {
+        type: 'array',
+        description: 'Até 6 anúncios ou páginas realmente encontradas na busca. Lista vazia se não encontrou nada. Nunca inventar URL.',
+        items: {
+          type: 'object', additionalProperties: false, required: ['titulo', 'precoReais', 'fonte', 'url', 'estado'],
+          properties: {
+            titulo: { type: 'string' },
+            precoReais: IA_INT_OU_NULL,
+            fonte: { type: 'string', description: 'Nome do site: OLX, Mercado Livre, Enjoei, Magalu…' },
+            url: { type: 'string', description: 'URL exata da página encontrada.' },
+            estado: { type: 'string', enum: ['novo', 'usado', 'desconhecido'] },
+          },
+        },
+      },
+    },
+  };
+}
+
+// Categorias que o painel conhece, para a sugestão cair num valor que o
+// <select> aceita. As gravadas primeiro; as padrão só se não houver nenhuma.
+function iaCategorias() {
+  const gravadas = readKey('toronto-tracker-inv-categories', null);
+  const lista = (Array.isArray(gravadas) && gravadas.length ? gravadas : D.DEFAULT_INV_CATEGORIES)
+    .filter(c => typeof c === 'string' && c.trim())
+    .map(c => c.trim().slice(0, 40));
+  if (!lista.includes(D.INV_UNCATEGORIZED)) lista.push(D.INV_UNCATEGORIZED);
+  return [...new Set(lista)];
+}
+
+// Lê do disco as fotos que o navegador já subiu. O nome passa pelo mesmo
+// crivo da rota de foto da vitrine: basename corta ../, a regex corta o resto.
+function iaLerFotos(lista) {
+  const out = [];
+  for (const p of (Array.isArray(lista) ? lista : [])) {
+    if (out.length >= IA_MAX_FOTOS) break;
+    if (typeof p !== 'string') continue;
+    const nome = path.basename(p);
+    if (!UPLOAD_NAME_RE.test(nome)) continue;
+    const tipo = TYPE_BY_EXT[path.extname(nome).toLowerCase()];
+    if (!tipo) continue;
+    try {
+      out.push({ tipo, dados: fs.readFileSync(path.join(UPLOAD_DIR, nome)).toString('base64') });
+    } catch (e) { /* foto sumiu do volume: segue sem ela */ }
+  }
+  return out;
+}
+
+async function iaConsultar({ imagens, texto, categorias }) {
+  const content = [
+    ...imagens.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.tipo, data: im.dados } })),
+    { type: 'text', text: texto },
+  ];
+  const messages = [{ role: 'user', content }];
+  const params = {
+    model: IA_MODELO,
+    max_tokens: 16000,
+    system: IA_SISTEMA,
+    // A busca roda no servidor da Anthropic; max_uses é o teto de custo por
+    // consulta (cada busca é cobrada à parte dos tokens).
+    tools: [{
+      type: 'web_search_20260209', name: 'web_search', max_uses: 5,
+      user_location: { type: 'approximate', country: 'BR', timezone: 'America/Sao_Paulo' },
+    }],
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema: iaSchema(categorias) } },
+    // Recusa do classificador de segurança vira nova tentativa noutro modelo,
+    // no servidor da Anthropic — sem isso a resposta simplesmente para.
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+  };
+  const uso = { entrada: 0, saida: 0, buscas: 0, voltas: 0 };
+  let resp;
+  for (let i = 0; i < 3; i++) {
+    resp = await ia.beta.messages.create({ ...params, messages });
+    uso.voltas++;
+    uso.entrada += resp.usage.input_tokens || 0;
+    uso.saida += resp.usage.output_tokens || 0;
+    uso.buscas += (resp.usage.server_tool_use && resp.usage.server_tool_use.web_search_requests) || 0;
+    if (resp.stop_reason !== 'pause_turn') break;
+    // O laço de busca do servidor pausou: reenvia com o turno parcial anexado
+    // e SEM mensagem nova — a API vê o server_tool_use pendente e retoma.
+    messages.push({ role: 'assistant', content: resp.content });
+  }
+  return { resp, uso };
+}
+
+// Do mais específico para o mais geral: APIConnectionError herda de APIError.
+function iaErroHttp(err) {
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return [502, 'chave da Anthropic recusada — confira ANTHROPIC_API_KEY no Railway'];
+  }
+  if (err instanceof Anthropic.RateLimitError) return [429, 'a Anthropic pediu para esperar — tente daqui a 1 minuto'];
+  if (err instanceof Anthropic.BadRequestError) return [502, 'pedido inválido para a IA (bug nosso) — veja o log do painel'];
+  if (err instanceof Anthropic.InternalServerError) return [502, 'a Anthropic está instável agora — tente de novo'];
+  if (err instanceof Anthropic.APIConnectionError) return [504, 'a consulta demorou demais — tente com menos fotos'];
+  if (err instanceof Anthropic.APIError) return [502, `falha ao falar com a Anthropic (HTTP ${err.status})`];
+  return [500, 'erro inesperado — veja o log do painel'];
+}
+
+app.get('/api/ia/status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ativa: IA_ATIVA, limiteDia: IA_LIMITE_DIA, usadasHoje: iaUsadasHoje() });
+});
+
+app.post('/api/ia/sugerir', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!IA_ATIVA) return res.status(503).json({ erro: 'ANTHROPIC_API_KEY não configurada' });
+  if (iaEmVoo >= IA_MAX_EM_VOO) return res.status(429).json({ erro: 'Já há duas consultas em andamento — aguarde um instante' });
+  if (iaUsadasHoje() >= IA_LIMITE_DIA) return res.status(429).json({ erro: `Limite de ${IA_LIMITE_DIA} consultas por dia atingido — volta amanhã` });
+
+  const b = req.body || {};
+  const texto = (v, max) => String(v || '').trim().slice(0, max);
+  const titulo = texto(b.titulo, 120);
+  const categoria = texto(b.categoria, 40);
+  const descricao = texto(b.descricaoPublica, 280);
+  const estado = D.CONDITIONS.includes(b.estado) ? b.estado : 'Bom';
+  const imagens = iaLerFotos(b.fotos);
+  if (!titulo && !imagens.length) return res.status(422).json({ erro: 'Dê um nome ou uma foto ao item antes de pedir a sugestão' });
+
+  const pedido = [
+    `Item: ${titulo || '(sem nome — identifique pela foto)'}`,
+    `Categoria atual: ${categoria || '(nenhuma)'}`,
+    `Estado informado: ${estado}`,
+    `Descrição atual: ${descricao || '(nenhuma)'}`,
+    `Fotos: ${imagens.length || 'nenhuma'}`,
+  ].join('\n');
+
+  // Conta antes de chamar: chamada que falha também custou. Num freio de
+  // dinheiro, errar para o lado de contar demais é o lado certo.
+  iaUsadas++;
+  iaEmVoo++;
+  try {
+    const { resp, uso } = await iaConsultar({ imagens, texto: pedido, categorias: iaCategorias() });
+    // Estimativa só para o log (Opus 5.5: US$4/US$20 por milhão; US$0,01 por
+    // busca). Não vai para o navegador porque tabela de preço muda.
+    const custo = (uso.entrada * 4 + uso.saida * 20) / 1e6 + uso.buscas * 0.01;
+    console.log(`[ia] "${titulo.slice(0, 40)}" fotos=${imagens.length} voltas=${uso.voltas} in=${uso.entrada} out=${uso.saida} buscas=${uso.buscas} stop=${resp.stop_reason} modelo=${resp.model} ~US$${custo.toFixed(3)}`);
+    if (resp.stop_reason === 'refusal') return res.status(502).json({ erro: 'A IA recusou esta consulta — tente descrever o item de outro jeito' });
+    if (resp.stop_reason !== 'end_turn') return res.status(502).json({ erro: 'A resposta veio cortada — tente de novo' });
+    const bloco = resp.content.filter(c => c.type === 'text').pop();
+    let json;
+    try { json = JSON.parse(bloco ? bloco.text : ''); }
+    catch (e) { return res.status(502).json({ erro: 'A IA respondeu num formato inesperado — tente de novo' }); }
+    const reais = r => (typeof r === 'number' && Number.isFinite(r) ? Math.round(r) * 100 : null);
+    const faixa = json.faixaUsadoReais || {};
+    // Passa pela mesma normalização que o navegador aplica ao gravar: o que
+    // sai daqui é exatamente o que vai parar no item.
+    const sugestao = D.normalizeAiSuggestion({
+      geradaEm: new Date().toISOString(),
+      titulo: json.titulo,
+      descricaoPublica: json.descricaoPublica,
+      categoriaSugerida: json.categoriaSugerida,
+      precoNovoCents: reais(json.precoNovoReais),
+      faixaUsadoCents: { min: reais(faixa.min), max: reais(faixa.max) },
+      precoSugeridoCents: reais(json.precoSugeridoReais),
+      confianca: json.confianca,
+      justificativa: json.justificativa,
+      comparaveis: (Array.isArray(json.comparaveis) ? json.comparaveis : []).map(c => ({
+        titulo: c.titulo, precoCents: reais(c.precoReais), fonte: c.fonte, url: c.url, estado: c.estado,
+      })),
+    });
+    res.json({ sugestao, uso: { entrada: uso.entrada, saida: uso.saida, buscas: uso.buscas } });
+  } catch (err) {
+    // Classe, status e a mensagem do SDK (que não carrega a chave). Nunca o
+    // corpo do pedido: a foto em base64 encheria o log e não diria nada.
+    const [status, erro] = iaErroHttp(err);
+    console.error('[ia] falhou:', err && err.constructor ? err.constructor.name : typeof err, err && err.status, String(err && err.message || '').slice(0, 300));
+    res.status(status).json({ erro });
+  } finally {
+    iaEmVoo--;
+  }
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(PORT, () => {
-  console.log(`Painel de Mudança rodando na porta ${PORT}`);
+  console.log(`Painel de Mudança rodando na porta ${PORT} · IA: ${IA_ATIVA ? `ativa (${IA_LIMITE_DIA}/dia)` : 'desligada'}`);
+  if (!IA_ATIVA) console.error('[ia] falta ANTHROPIC_API_KEY — o botão "Sugerir com IA" não vai aparecer');
 });

@@ -10,6 +10,7 @@
     "vitrine": "node vitrine/server.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "better-sqlite3": "^13.0.3",
     "express": "^4.21.2"
   },
