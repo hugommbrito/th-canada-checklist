@@ -1006,6 +1006,24 @@
      seletor de arquivo com o padding de um input. */
   .photo-btns input[type=file]{width:auto;padding:0;border:none;background:none;font-size:12px;}
 
+  /* ---- sugestão com IA ---- */
+  /* .field e .ia-panel têm display próprio, que venceria o [hidden] do navegador. */
+  #iaField[hidden],.ia-panel[hidden]{display:none;}
+  .ia-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .ia-head .btn-secondary{margin:0;}
+  .ia-panel{border:1px dashed #d8cfb6;border-radius:8px;padding:10px 12px;margin-top:8px;background:#fbf8f0;font-size:12px;line-height:1.4;}
+  .ia-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);margin-bottom:6px;}
+  .ia-row{display:flex;gap:8px;align-items:flex-start;margin:6px 0;}
+  .ia-row .ia-val{flex:1;min-width:0;overflow-wrap:anywhere;}
+  .ia-row .ia-val b{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);}
+  .ia-row .ia-sub{color:var(--ink-soft);font-size:11px;}
+  .ia-panel button{flex-shrink:0;border:1px solid #d8cfb6;background:#fff;border-radius:7px;padding:2px 10px;cursor:pointer;font-size:11px;color:inherit;}
+  .ia-panel button:hover{border-color:var(--amber-dim);color:var(--amber-dim);}
+  .ia-just{margin:8px 0 0;color:var(--ink-soft);}
+  .ia-comps{margin:6px 0 0;padding-left:16px;}
+  .ia-comps li{margin:2px 0;overflow-wrap:anywhere;}
+  .ia-comps a{color:inherit;}
+
   /* ---- recebimentos e story ---- */
   .receipts{border:1px solid #d8cfb6;border-radius:8px;padding:8px;background:#fff;}
   .rc-empty{
@@ -1520,6 +1538,15 @@
       </div>
     </div>
 
+    <div class="field" id="iaField" hidden>
+      <div class="ia-head">
+        <button type="button" class="btn-secondary" id="iaAsk">✨ Sugerir com IA</button>
+        <span class="photo-state" id="iaState"></span>
+      </div>
+      <div class="ia-panel" id="iaPanel" hidden></div>
+      <span class="hint-priv">🔒 Vai para a IA: nome, categoria, estado, descrição pública e até 4 fotos. Piso e observações nunca vão. A resposta fica só aqui no painel.</span>
+    </div>
+
     <div class="field-row">
       <div class="field">
         <label>Categoria</label>
@@ -1743,7 +1770,7 @@ const {
   DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS,
   norm, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
   newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
-  fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem,
+  fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem, normalizeAiSuggestion,
   isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
   normalizeInvFilter, filterInvItems,
   newShareSlug, normalizeShare, normalizeShareStore, shareStatus, isPublicItem,
@@ -3115,6 +3142,8 @@ function invDetailHtml(it){
         ${doa && it.donee ? dtCell('Para quem 🔒', it.donee) : ''}
         ${doa && it.donationStatus === 'Doado' && it.resolvedAt ? dtCell('Doado em', fmtDateTime(it.resolvedAt)) : ''}
         ${it.minPrice != null && sells ? dtCell('Piso 🔒', fmtMoney(it.minPrice)) : ''}
+        ${sells && it.aiSuggestion && it.aiSuggestion.precoSugeridoCents != null
+          ? dtCell('Sugestão IA 🔒', `${fmtMoney(it.aiSuggestion.precoSugeridoCents)} · confiança ${it.aiSuggestion.confianca}`) : ''}
         ${sells && it.saleStatus === 'Vendido' ? dtCell('Forma de pagamento', it.paymentMethod || 'não informada') : ''}
         ${sells && it.saleStatus === 'Vendido'
           ? dtCell('Recebido', pendingOf(it) > 0
@@ -3529,6 +3558,9 @@ let pendingPhotos = [];
 // de fechar não pode pintar a foto no item seguinte — e, pior, fazer o save
 // desse item apagar a foto dele.
 let modalGeneration = 0;
+// Sugestão de IA do item aberto: a que veio gravada com ele ou a que acabou
+// de chegar. Só vira aiSuggestion no Salvar — Cancelar descarta.
+let editingAi = null;
 
 // Editor de recebimentos: mesma mecânica do editor de checklist — cópia
 // profunda enquanto o modal está aberto, comprometida só no Salvar.
@@ -3655,6 +3687,10 @@ function openInvModal(it, opts){
   document.getElementById('iNotes').value = it ? it.notes : '';
   document.getElementById('iPublicNotes').value = it ? it.publicNotes : '';
   editingReceipts = it && it.receipts ? JSON.parse(JSON.stringify(it.receipts)) : [];
+  editingAi = it ? it.aiSuggestion : null;
+  iaPedindo = false;
+  renderIaPanel(editingAi);
+  setIaState('');
   document.getElementById('rcAmount').value = '';
   document.getElementById('rcDate').value = '';
   if(opts.stage === 'Vendido') document.getElementById('iDestination').value = 'Vender';
@@ -3672,6 +3708,8 @@ function openInvModal(it, opts){
 function closeInvModal(committed){
   modalGeneration++;   // invalida qualquer upload ainda em vôo
   editingReceipts = [];
+  editingAi = null;
+  iaPedindo = false;
   settlePhotos(committed);
   document.getElementById('invModalBackdrop').classList.remove('open');
   editingInvId = null;
@@ -3715,6 +3753,137 @@ document.getElementById('iPublicFromNotes').addEventListener('click', ()=>{
   toast('Copiado — revise antes de salvar');
 });
 
+// ---- Sugestão com IA ----
+// O botão só existe se o servidor tem chave: perguntar uma vez no boot evita
+// um botão que aparece, é clicado e responde "não configurado".
+let iaStatus = { ativa:false };
+// Consulta em andamento para o modal aberto. Zera junto com a geração.
+let iaPedindo = false;
+async function fetchIaStatus(){
+  try{
+    const res = await fetch('/api/ia/status');
+    iaStatus = res.ok ? await res.json() : { ativa:false };
+  }catch(e){ iaStatus = { ativa:false }; }
+  document.getElementById('iaField').hidden = !iaStatus.ativa;
+}
+
+function setIaState(msg, isError){
+  const el = document.getElementById('iaState');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+}
+
+// Sem nome e sem foto não há o que pesquisar; com upload em vôo a foto ainda
+// não está no disco para o servidor ler.
+function syncIaButton(){
+  const temNome = !!document.getElementById('iTitle').value.trim();
+  document.getElementById('iaAsk').disabled =
+    iaPedindo || pendingPhotos.length > 0 || (!temNome && editingPhotos.length === 0);
+}
+document.getElementById('iTitle').addEventListener('input', syncIaButton);
+
+// Mesma guarda de geração do upload: capturar antes do await, comparar depois.
+// Uma resposta que chega depois de o modal fechar não pode pintar o painel
+// do item seguinte.
+async function pedirSugestaoIa(){
+  const titulo = document.getElementById('iTitle').value.trim();
+  if(!titulo && !editingPhotos.length){ toast('Dê um nome ou uma foto antes de pedir a sugestão'); return; }
+  if(pendingPhotos.length){ toast('Espere as fotos terminarem de subir'); return; }
+  const gen = modalGeneration;
+  iaPedindo = true;
+  syncIaButton();
+  setIaState('consultando a internet… pode levar até 2 minutos');
+  try{
+    const res = await fetch('/api/ia/sugerir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        titulo,
+        categoria: document.getElementById('iCategory').value,
+        estado: document.getElementById('iCondition').value,
+        descricaoPublica: document.getElementById('iPublicNotes').value.trim(),
+        fotos: editingPhotos.slice(),
+      }),
+    });
+    const body = await res.json().catch(()=>({}));
+    if(gen !== modalGeneration) return;
+    if(!res.ok) throw new Error(body.erro || ('HTTP ' + res.status));
+    editingAi = normalizeAiSuggestion(body.sugestao);
+    renderIaPanel(editingAi);
+    setIaState('');
+    toast('Sugestão pronta — use o que fizer sentido');
+  }catch(err){
+    if(gen !== modalGeneration) return;
+    console.error(err);
+    setIaState(err.message, true);
+  }finally{
+    if(gen === modalGeneration){ iaPedindo = false; syncIaButton(); }
+  }
+}
+document.getElementById('iaAsk').addEventListener('click', pedirSugestaoIa);
+
+function iaLinha(campo, rotulo, valor, sub){
+  if(!valor) return '';
+  return `<div class="ia-row"><div class="ia-val"><b>${escapeHtml(rotulo)}</b>${escapeHtml(valor)}${sub ? `<div class="ia-sub">${escapeHtml(sub)}</div>` : ''}</div><button type="button" data-ia="${escapeAttr(campo)}">Usar</button></div>`;
+}
+
+function renderIaPanel(sug){
+  const el = document.getElementById('iaPanel');
+  if(!sug){ el.innerHTML = ''; el.hidden = true; return; }
+  const faixa = sug.faixaUsadoCents || {};
+  const refs = [];
+  if(sug.precoNovoCents != null) refs.push('novo: ' + fmtMoney(sug.precoNovoCents));
+  if(faixa.min != null || faixa.max != null) refs.push('usado: ' + fmtMoney(faixa.min) + ' – ' + fmtMoney(faixa.max));
+  // A URL já passou por normalizeAiSuggestion (só http/https), então pode
+  // virar href; o texto ainda passa pelo escape porque veio de fora.
+  const comps = (sug.comparaveis || []).map(c => {
+    const nome = escapeHtml(c.titulo || c.url);
+    const link = c.url ? `<a href="${escapeAttr(c.url)}" target="_blank" rel="noopener noreferrer">${nome} ↗</a>` : nome;
+    const partes = [link];
+    if(c.precoCents != null) partes.push(escapeHtml(fmtMoney(c.precoCents)));
+    if(c.fonte) partes.push(escapeHtml(c.fonte));
+    if(c.estado && c.estado !== 'desconhecido') partes.push(escapeHtml(c.estado));
+    return `<li>${partes.join(' · ')}</li>`;
+  });
+  el.innerHTML = `
+    <div class="ia-meta"><span>Sugestão de ${escapeHtml(fmtDateTime(sug.geradaEm))} · confiança ${escapeHtml(sug.confianca)}</span><button type="button" data-ia="refazer">Refazer</button></div>
+    ${iaLinha('titulo', 'Nome', sug.titulo)}
+    ${invCategories.includes(sug.categoriaSugerida) ? iaLinha('categoria', 'Categoria', sug.categoriaSugerida) : ''}
+    ${iaLinha('descricao', 'Descrição pública', sug.descricaoPublica)}
+    ${sug.precoSugeridoCents != null ? iaLinha('preco', 'Preço pedido', fmtMoney(sug.precoSugeridoCents), refs.join(' · ')) : ''}
+    ${sug.justificativa ? `<p class="ia-just">${escapeHtml(sug.justificativa)}</p>` : ''}
+    ${comps.length ? `<ul class="ia-comps">${comps.join('')}</ul>` : '<p class="ia-just">Nenhum anúncio encontrado — a estimativa é sem referência direta.</p>'}`;
+  el.hidden = false;
+}
+
+// Aplicar sobrescreve direto, com aviso e sem confirm(): o clique já é por
+// campo, o texto é público por construção, e Cancelar descarta tudo. O "↓"
+// acima recusa sobrescrever porque copia texto privado para campo público —
+// aqui não há essa direção de vazamento.
+document.getElementById('iaPanel').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-ia]');
+  if(!btn || !editingAi) return;
+  const acao = btn.dataset.ia;
+  if(acao === 'refazer'){ pedirSugestaoIa(); return; }
+  if(acao === 'titulo'){
+    const el = document.getElementById('iTitle');
+    el.value = editingAi.titulo; el.focus(); syncIaButton();
+    toast('Nome aplicado — revise antes de salvar');
+  } else if(acao === 'categoria'){
+    document.getElementById('iCategory').value = editingAi.categoriaSugerida;
+    toast('Categoria aplicada');
+  } else if(acao === 'descricao'){
+    const el = document.getElementById('iPublicNotes');
+    el.value = editingAi.descricaoPublica.slice(0, 280); el.focus();
+    toast('Descrição aplicada — revise antes de salvar');
+  } else if(acao === 'preco'){
+    document.getElementById('iAsk').value = moneyToInput(editingAi.precoSugeridoCents);
+    toast(document.getElementById('iDestination').value === 'Vender'
+      ? 'Preço aplicado — revise antes de salvar'
+      : 'Preço aplicado — mude o destino para Vender para vê-lo');
+  }
+});
+
 document.getElementById('invOpenAdd').addEventListener('click', ()=> openInvModal(null));
 document.getElementById('iCancel').addEventListener('click', ()=> closeInvModal(false));
 document.getElementById('invModalBackdrop').addEventListener('click', (e)=>{
@@ -3749,6 +3918,7 @@ document.getElementById('iSave').addEventListener('click', async ()=>{
     notes: document.getElementById('iNotes').value.trim(),
     publicNotes: document.getElementById('iPublicNotes').value.trim(),
     photos: editingPhotos.slice(),
+    aiSuggestion: editingAi,
   };
   if(editingInvId){
     const it = invItems.find(x => x.id === editingInvId);
@@ -3833,6 +4003,7 @@ function renderPhotoGrid(){
   });
   // Salvar com upload em vôo gravaria o item sem a foto que está subindo.
   document.getElementById('iSave').disabled = pendingPhotos.length > 0;
+  syncIaButton();
 }
 
 document.getElementById('iPhotoHint').textContent =
@@ -4507,6 +4678,7 @@ setView(viewFromHash());
 loadAll();
 loadInventory();
 loadMoveDate();
+fetchIaStatus();
 // Depois do inventário no boot só na ordem do código: a frase de composição de
 // cada lista precisa dos itens, e quem chega primeiro dispara o render de novo.
 loadShares().then(()=>{ renderShareCount(); if(activeView === 'inventory') render(); });
