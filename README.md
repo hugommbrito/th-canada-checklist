@@ -198,6 +198,37 @@ descrição — senão o texto simplesmente encolheria sem explicação. O botã
 coisa para a outra, por item e revisável antes de salvar; nada é migrado automaticamente,
 porque migrar em silêncio seria justamente publicar o que é interno.
 
+### Sugestão com IA
+
+Tirar a foto e escrever "sofá 3 lugares" é rápido; descobrir por quanto um sofá igual está
+sendo vendido na OLX e escrever uma descrição decente é o que empaca. O botão **✨ Sugerir
+com IA** no modal do item faz essa parte: manda nome, categoria, estado, descrição pública
+e até 4 fotos para o Claude, que pesquisa na internet (busca web da própria Anthropic,
+localizada no Brasil) e devolve título, descrição pública, categoria, preço de novo, faixa
+de usado, preço pedido sugerido, o grau de confiança, a justificativa e os anúncios que
+encontrou, com link.
+
+Nada é aplicado sozinho. A sugestão aparece num painel dentro do modal, e cada campo tem o
+seu **Usar** — o mesmo "revise antes de salvar" do botão `↓`. Ela fica gravada no item
+(`aiSuggestion`, 🔒) para os links dos comparáveis estarem à mão na hora de negociar, e o
+detalhe do item mostra o preço sugerido ao lado do piso.
+
+O que **não** vai para o modelo: o preço mínimo, as observações internas, comprador,
+recebimentos, comentários. Não é filtro de saída — esses campos simplesmente não entram no
+pedido. E o que volta não sai do painel: `itemView` e `vitrineItemView` são allowlists,
+então a sugestão não aparece no snapshot nem na vitrine.
+
+O modelo é instruído a não inventar: só cita preços e URLs que apareceram na busca, e diz
+quando não achou referência (confiança baixa, preço nulo). Ainda assim é sugestão — o preço
+é para vender em poucas semanas, não o máximo que o item vale.
+
+Custo: cerca de US$ 0,10 a 0,30 por consulta (tokens mais US$ 0,01 por busca, com no máximo
+5 buscas por consulta). Como o painel não tem login, há um teto de `IA_LIMITE_DIA` consultas
+por dia (padrão 40, contado em memória no fuso de São Paulo — reiniciar o serviço zera) e
+no máximo duas consultas ao mesmo tempo. Sem `ANTHROPIC_API_KEY` o botão não aparece e a
+rota `POST /api/ia/sugerir` responde 503; `GET /api/ia/status` diz se está ativa e quantas
+consultas já foram hoje.
+
 ### Prazos
 
 O prazo de cada item é lido contra a data da mudança que o painel já guarda, em três
@@ -393,6 +424,9 @@ npm start
 Abre em `http://localhost:3000`. O banco SQLite é criado em `./data/app.db`
 (ignorado pelo git).
 
+Para o botão de sugestão com IA aparecer, passe a chave junto:
+`ANTHROPIC_API_KEY=sk-ant-... npm start`. Sem ela o painel sobe igual, só sem o botão.
+
 ## Deploy no Railway
 
 1. Criar um novo projeto no Railway a partir deste repositório.
@@ -403,6 +437,10 @@ Abre em `http://localhost:3000`. O banco SQLite é criado em `./data/app.db`
    `DATABASE_PATH`, então não há nada a configurar além dele.
 4. Deploy — o Railway detecta o `package.json` e roda `npm install && npm start`
    automaticamente.
+
+Opcional, para a sugestão com IA: `ANTHROPIC_API_KEY` **no serviço do painel — nunca na
+vitrine** — e, se quiser outro teto, `IA_LIMITE_DIA`. O log do boot diz `IA: ativa (40/dia)`
+ou `IA: desligada`.
 
 O painel fica acessível pela URL pública do serviço. Não há autenticação — o link em si
 é o controle de acesso (uso combinado de ser só entre Hugo e Taís, por tempo limitado).

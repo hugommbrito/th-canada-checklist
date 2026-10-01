@@ -67,6 +67,10 @@ Item com destino *Doar* traz o bloco `doacao`: `{ status, paraQuem, doadoEm }`, 
 `inventario.porStatusDeDoacao`. Um item *Prometido* é alguém que disse "eu quero" e
 ainda não buscou — vale cobrar quando fica parado.
 
+O item pode guardar uma sugestão de IA (`aiSuggestion`: preço de referência, descrição,
+links de anúncios comparáveis). É privada e **não sai no snapshot** nem na vitrine — se
+aparecer, é bug, não novidade.
+
 `resolvido` significa: vendido, se o destino é Vender; doado, se é Doar; marcado como
 "já saiu de casa", nos outros destinos. É o que mede o progresso da triagem.
 
