@@ -893,6 +893,12 @@
     display:block;font-family:'Inter',sans-serif;font-size:10px;color:var(--ink-soft);
     margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
+  /* Para quem a doação vai, ao lado do estágio: é o "comprador" de quem doa. */
+  .st-donee{
+    display:inline-block;margin-left:5px;max-width:110px;vertical-align:middle;
+    font-family:'Inter',sans-serif;font-size:10px;color:var(--ink-soft);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
   .na{color:#a9a294;}
   .inv-row.no-money .na{opacity:.55;}
   .c-act{white-space:nowrap;text-align:right;}
@@ -1629,6 +1635,21 @@
       </fieldset>
     </fieldset>
 
+    <fieldset class="sale-block" id="iDonationBlock">
+      <legend>Doação</legend>
+      <div class="field-row">
+        <div class="field">
+          <label>Status</label>
+          <select id="iDonationStatus"></select>
+        </div>
+        <div class="field">
+          <label>Para quem</label>
+          <input type="text" id="iDonee" placeholder="Nome / contato">
+          <span class="hint-priv">🔒 Só nós dois vemos.</span>
+        </div>
+      </div>
+    </fieldset>
+
     <div class="field">
       <label>Descrição pública</label>
       <div class="cat-row">
@@ -1718,7 +1739,7 @@ const INV_CATS_KEY = 'toronto-tracker-inv-categories';
 // diário nunca divergirem. Destino, estágios de venda, TTL do story e afins
 // estão lá junto das funções que dependem deles.
 const {
-  DESTINATIONS, SALE_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
+  DESTINATIONS, SALE_STAGES, DONATION_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
   DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS,
   norm, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
   newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
@@ -2090,6 +2111,18 @@ document.querySelectorAll('#whoBackdrop [data-who]').forEach(btn=>{
 function stampEdit(task){
   task.lastEditedBy = getCurrentUser() || 'Ambos';
   task.lastEditedAt = new Date().toISOString();
+}
+
+// Único lugar que muda o estágio de doação. O resolvedAt acompanha a fronteira
+// de "Doado": ganha carimbo ao chegar lá e perde ao voltar — voltar é desfazer
+// um clique errado, e um item que "saiu de casa" às 14h03 e voltou não saiu.
+// Mudar só o destino (Levar → Doar) não passa por aqui e não toca em nada.
+function setDonationStage(it, target){
+  if(!DONATION_STAGES.includes(target) || target === it.donationStatus) return;
+  const era = it.donationStatus === 'Doado';
+  it.donationStatus = target;
+  if(target === 'Doado')  it.resolvedAt = new Date().toISOString();
+  else if(era)            it.resolvedAt = null;
 }
 
 
@@ -2901,7 +2934,7 @@ function visibleItems(){
 const SORT_KEYS = {
   title:      it => norm(it.title),
   destination:it => DESTINATIONS.findIndex(d => d.id === it.destination),
-  saleStatus: it => it.destination === 'Vender' ? SALE_STAGES.indexOf(it.saleStatus) : null,
+  saleStatus: stageRank,
   owner:      it => it.owner || '',
   deadline:   it => it.deadline || null,
   askPrice:   it => it.destination === 'Vender' ? it.askPrice : null,
@@ -2929,6 +2962,21 @@ function sortItems(list){
 
 const NA = '<span class="na">—</span>';
 
+// A coluna "Status" tem dois ciclos, um de venda e um de doação. Ordenar por
+// ela é ordenar por progresso, então o índice de cada ciclo é reescalado para
+// 0..4: "Doado" empata com "Vendido" no topo, e não com "Reservado".
+function stageOf(it){
+  if(it.destination === 'Vender') return { stages: SALE_STAGES, value: it.saleStatus };
+  if(it.destination === 'Doar')   return { stages: DONATION_STAGES, value: it.donationStatus };
+  return null;
+}
+function stageRank(it){
+  const s = stageOf(it);
+  if(!s) return null;
+  const i = Math.max(0, s.stages.indexOf(s.value));
+  return i * (SALE_STAGES.length - 1) / (s.stages.length - 1);
+}
+
 function destMeta(it){
   return DESTINATIONS.find(d => d.id === it.destination) || DESTINATIONS[0];
 }
@@ -2936,10 +2984,20 @@ function destBadge(it){
   const d = destMeta(it);
   return `<span class="dest-badge db-${d.cls}">${escapeHtml(d.id)}</span>`;
 }
+// Serve aos dois ciclos. As cores .st-0..4 são as da venda; a doação tem um
+// estágio a menos e pula a cor de "Negociando" (2), para "Doado" ter o verde
+// de "Vendido" e "Prometido" o roxo de "Reservado".
+const DONATION_STAGE_COLOR = [0, 1, 3, 4];
 function stageBadge(it){
-  const i = Math.max(0, SALE_STAGES.indexOf(it.saleStatus));
-  return `<button class="st-badge st-${i}" data-action="inv-stage" data-id="${escapeAttr(it.id)}"
-    title="Clique avança, Alt+clique volta">${i === 4 ? '✓ ' : ''}${escapeHtml(it.saleStatus)}</button>`;
+  const s = stageOf(it);
+  if(!s) return '';
+  const i = Math.max(0, s.stages.indexOf(s.value));
+  const last = i === s.stages.length - 1;
+  const cor = s.stages === SALE_STAGES ? i : DONATION_STAGE_COLOR[i];
+  const badge = `<button class="st-badge st-${cor}" data-action="inv-stage" data-id="${escapeAttr(it.id)}"
+    title="Clique avança, Alt+clique volta">${last ? '✓ ' : ''}${escapeHtml(s.value)}</button>`;
+  return badge + (it.destination === 'Doar' && it.donee
+    ? `<span class="st-donee" title="${escapeAttr(it.donee)}">→ ${escapeHtml(it.donee)}</span>` : '');
 }
 function storyBadge(it){
   const a = storyAge(it);
@@ -2993,10 +3051,10 @@ function invRowHtml(it){
     <td class="c-name">
       <span class="inv-name">${escapeHtml(it.title)}</span>
       <span class="inv-sub">${it.category ? `<i class="cat-dot" style="background:${colorForCategory(it.category)}"></i>${escapeHtml(it.category)}` : ''}${it.room ? ` · ${escapeHtml(it.room)}` : ''}${marcas.length ? ` · 🔗 ${escapeHtml(marcas[0])}${marcas.length > 1 ? ' +' + (marcas.length - 1) : ''}` : ''}</span>
-      <span class="sm-only">${destBadge(it)}${sells ? stageBadge(it) + storyBadge(it) : ''}${riskBadge(it)}</span>
+      <span class="sm-only">${destBadge(it)}${stageBadge(it)}${sells ? storyBadge(it) : ''}${riskBadge(it)}</span>
     </td>
     <td class="c-dest">${destBadge(it)}</td>
-    <td class="c-status">${sells ? stageBadge(it) + storyBadge(it) : NA}</td>
+    <td class="c-status">${stageBadge(it) + (sells ? storyBadge(it) : '') || NA}</td>
     <td class="c-owner"><span class="who" title="${escapeAttr(it.owner)}">${escapeHtml(ownerShort(it.owner))}</span></td>
     <td class="c-prazo">${riskBadge(it) || NA}</td>
     <td class="c-ask money">${sells
@@ -3045,6 +3103,7 @@ function dtCell(label, value, url, cls){
 function invDetailHtml(it){
   const c = it.comments || [];
   const sells = it.destination === 'Vender';
+  const doa = it.destination === 'Doar';
   return `
   <tr class="inv-detail" data-id="${escapeAttr(it.id)}">
     <td colspan="10">
@@ -3053,6 +3112,8 @@ function invDetailHtml(it){
         ${dtCell('Anunciado em', it.channel, it.listingUrl || null)}
         ${it.saleDate ? dtCell('Vendido em', fmtDate(it.saleDate)) : ''}
         ${it.buyer ? dtCell('Comprador', it.buyer) : ''}
+        ${doa && it.donee ? dtCell('Para quem 🔒', it.donee) : ''}
+        ${doa && it.donationStatus === 'Doado' && it.resolvedAt ? dtCell('Doado em', fmtDateTime(it.resolvedAt)) : ''}
         ${it.minPrice != null && sells ? dtCell('Piso 🔒', fmtMoney(it.minPrice)) : ''}
         ${sells && it.saleStatus === 'Vendido' ? dtCell('Forma de pagamento', it.paymentMethod || 'não informada') : ''}
         ${sells && it.saleStatus === 'Vendido'
@@ -3070,7 +3131,7 @@ function invDetailHtml(it){
       ${(it.receipts || []).length ? `<div class="dt-receipts">
         ${it.receipts.map(r => `<span class="dt-receipt">${escapeHtml(fmtMoney(r.amount))}<i>${r.at ? escapeHtml(fmtDateBR(r.at)) : ''}</i></span>`).join('')}
       </div>` : ''}
-      ${!sells && it.destination !== 'A decidir' ? `
+      ${!sells && !doa && it.destination !== 'A decidir' ? `
       <label class="dt-resolve">
         <input type="checkbox" data-action="inv-resolve" data-id="${escapeAttr(it.id)}" ${it.resolvedAt ? 'checked' : ''}>
         Já saiu de casa${it.resolvedAt ? ` · ${fmtDateTime(it.resolvedAt)}` : ''}
@@ -3199,6 +3260,7 @@ function populateInvSelects(){
   fillSelect(document.getElementById('iCategory'), invCategories, null);
   fillSelect(document.getElementById('iDestination'), DESTINATIONS.map(d=>d.id), null);
   fillSelect(document.getElementById('iSaleStatus'), SALE_STAGES, null);
+  fillSelect(document.getElementById('iDonationStatus'), DONATION_STAGES, null);
   document.getElementById('roomOptions').innerHTML =
     rooms.map(r => `<option value="${escapeAttr(r)}">`).join('');
 }
@@ -3332,12 +3394,20 @@ document.addEventListener('click', async (e)=>{
     stampEdit(it);
     toast('Story marcado como repostado agora');
   } else if(action === 'inv-stage'){
-    const i = SALE_STAGES.indexOf(it.saleStatus);
-    const target = SALE_STAGES[Math.min(Math.max(i + (e.altKey ? -1 : 1), 0), SALE_STAGES.length - 1)];
-    // Vendido é o momento em que preço realizado, comprador e data existem —
-    // então em vez de gravar direto, abre o modal pedindo os três.
-    if(target === 'Vendido'){ openInvModal(it, { stage:'Vendido' }); return; }
-    it.saleStatus = target;
+    const s = stageOf(it);
+    if(!s) return;
+    const i = s.stages.indexOf(s.value);
+    const target = s.stages[Math.min(Math.max(i + (e.altKey ? -1 : 1), 0), s.stages.length - 1)];
+    if(it.destination === 'Doar'){
+      // Doação não pede modal: não há preço nem data a cobrar. "Para quem" é
+      // opcional e fica no ✎ para quem quiser registrar.
+      setDonationStage(it, target);
+    } else {
+      // Vendido é o momento em que preço realizado, comprador e data existem —
+      // então em vez de gravar direto, abre o modal pedindo os três.
+      if(target === 'Vendido'){ openInvModal(it, { stage:'Vendido' }); return; }
+      it.saleStatus = target;
+    }
     stampEdit(it);
   } else if(action === 'inv-add-comment'){
     const box = document.getElementById('icmt-' + id);
@@ -3571,6 +3641,8 @@ function openInvModal(it, opts){
   document.getElementById('iDestination').value = it ? it.destination : 'A decidir';
   document.getElementById('iDeadline').value = it ? (it.deadline || '') : '';
   document.getElementById('iSaleStatus').value = opts.stage || (it ? it.saleStatus : 'Não anunciado');
+  document.getElementById('iDonationStatus').value = it ? it.donationStatus : 'Não oferecido';
+  document.getElementById('iDonee').value = it ? it.donee : '';
   document.getElementById('iAsk').value = it ? moneyToInput(it.askPrice) : '';
   document.getElementById('iMin').value = it ? moneyToInput(it.minPrice) : '';
   document.getElementById('iSold').value = it ? moneyToInput(it.soldPrice) : '';
@@ -3606,12 +3678,14 @@ function closeInvModal(committed){
   dropPendingPhotos();
 }
 
-// Doar/Descartar/Levar não têm preço nem pipeline; o bloco some inteiro, mas os
-// valores continuam no DOM e no registro — trocar de destino nunca apaga dado.
+// Cada destino mostra só o seu bloco: venda tem preço e pipeline, doação tem o
+// ciclo dela, Levar/Descartar não têm nada. Os valores dos blocos escondidos
+// continuam no DOM e no registro — trocar de destino nunca apaga dado.
 function syncCondFields(){
   const dest = document.getElementById('iDestination').value;
   const status = document.getElementById('iSaleStatus').value;
   document.getElementById('iSaleBlock').classList.toggle('off', dest !== 'Vender');
+  document.getElementById('iDonationBlock').classList.toggle('off', dest !== 'Doar');
   const closing = dest === 'Vender' && (status === 'Vendido' || status === 'Reservado');
   document.getElementById('iCloseBlock').classList.toggle('off', !closing);
   const d = document.getElementById('iSaleDate');
@@ -3659,6 +3733,8 @@ document.getElementById('iSave').addEventListener('click', async ()=>{
     destination: document.getElementById('iDestination').value,
     deadline: document.getElementById('iDeadline').value || null,
     saleStatus: document.getElementById('iSaleStatus').value,
+    donationStatus: document.getElementById('iDonationStatus').value,
+    donee: document.getElementById('iDonee').value.trim(),
     askPrice: parseMoney(document.getElementById('iAsk').value),
     minPrice: parseMoney(document.getElementById('iMin').value),
     soldPrice: parseMoney(document.getElementById('iSold').value),
@@ -3676,10 +3752,16 @@ document.getElementById('iSave').addEventListener('click', async ()=>{
   };
   if(editingInvId){
     const it = invItems.find(x => x.id === editingInvId);
+    // O estágio passa por setDonationStage, e não pelo assign: é ele que sabe
+    // carimbar (ou limpar) o resolvedAt ao cruzar a fronteira de "Doado".
+    const donationStatus = data.donationStatus;
+    delete data.donationStatus;
     Object.assign(it, data);
+    setDonationStage(it, donationStatus);
     stampEdit(it);
   } else {
     const it = normalizeItem(Object.assign({ id:newInvId(), order:nextInvOrder() }, data));
+    if(it.donationStatus === 'Doado' && !it.resolvedAt) it.resolvedAt = new Date().toISOString();
     stampEdit(it);
     invItems.push(it);
   }

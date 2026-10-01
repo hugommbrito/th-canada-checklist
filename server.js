@@ -145,6 +145,7 @@ function itemView(it, moveDate, today) {
   const risco = D.itemRisk(it, moveDate, today);
   const story = D.storyAge(it);
   const vende = it.destination === 'Vender';
+  const doa = it.destination === 'Doar';
   return {
     id: it.id,
     nome: it.title,
@@ -183,6 +184,13 @@ function itemView(it, moveDate, today) {
         horasNoAr: Math.round(story.hours * 10) / 10,
         venceu: story.expired,
       } : null,
+    } : null,
+    // Irmão de `venda`, e null pelo mesmo motivo: item que não vai à doação não
+    // tem "status de doação nulo", tem outro destino.
+    doacao: doa ? {
+      status: it.donationStatus,
+      paraQuem: it.donee || null,
+      doadoEm: it.donationStatus === 'Doado' ? (it.resolvedAt || null) : null,
     } : null,
     comentarios: (it.comments || []).map(c => ({ autor: c.author, quando: c.at, texto: c.text })),
     editadoPor: it.lastEditedBy || null,
@@ -238,6 +246,7 @@ function buildSnapshot(since) {
       resolvidos: t.resolved,
       porDestino: contar(itensView, x => x.destino),
       porStatusDeVenda: contar(itensView.filter(x => x.venda), x => x.venda.status),
+      porStatusDeDoacao: contar(itensView.filter(x => x.doacao), x => x.doacao.status),
       categorias: invCats,
       dinheiro: {
         // Soma do que segue à venda. NÃO é pedido − recebido: vender acima do

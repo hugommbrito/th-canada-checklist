@@ -71,8 +71,25 @@ vazias, nunca em "R$ 0,00", que sugeriria "de graça".
 **Trocar o destino nunca apaga nada.** Marcar um sofá como *Doar* por engano depois de
 ter posto R$ 1.200 e voltar para *Vender* recupera tudo — quem decide se o dinheiro
 conta é a exibição e a soma, ambas filtrando por destino. Pelo mesmo motivo "resolvido"
-é derivado, nunca gravado: vendido para quem vende, um checkbox "já saiu de casa" para
-quem doa/leva/descarta.
+é derivado, nunca gravado: vendido para quem vende, doado para quem doa, um checkbox
+"já saiu de casa" para quem leva/descarta.
+
+### Doação também tem ciclo
+
+Quem vai para doação passa pelo mesmo tipo de acompanhamento que a venda, sem o dinheiro:
+*Não oferecido → Oferecido → Prometido → Doado*. O badge na coluna Status avança no
+clique e volta com Alt+clique, igual ao da venda, e não abre modal — não há preço nem
+data a cobrar. Junto vem o campo **Para quem** 🔒, o "comprador" da doação, que aparece
+ao lado do badge e entra na busca. Sem isso o acompanhamento ia parar nas observações
+("prometido para a Renata"), que ninguém consegue contar.
+
+*Doado* é o único estágio que resolve o item, e é ele que carimba o "saiu de casa":
+chegar em *Doado* grava a hora, voltar de *Doado* apaga — voltar é desfazer um clique
+errado. Item de doação gravado antes de existir o ciclo, com o checkbox marcado, entra
+como *Doado* na primeira leitura; sem isso o deploy desfaria o que já estava resolvido.
+
+Doação **não vai para a vitrine**: as listas públicas continuam mostrando só o que está
+à venda.
 
 ### Captura rápida
 

@@ -27,6 +27,11 @@
     { id:'Descartar', cls:'descartar' },
   ];
   const SALE_STAGES = ['Não anunciado','Anunciado','Negociando','Reservado','Vendido'];
+  // Doação tem o mesmo ciclo que venda, sem o dinheiro: oferecer, alguém dizer
+  // "eu quero", entregar. Sem estes estágios o acompanhamento ia parar nas
+  // observações ("prometido para a Renata"), que ninguém consegue contar.
+  // "Doado" é o "Vendido" daqui: o único estágio que resolve o item.
+  const DONATION_STAGES = ['Não oferecido','Oferecido','Prometido','Doado'];
   const CONDITIONS = ['Novo','Ótimo','Bom','Usado'];
   const PAYMENT_METHODS = ['PIX','Dinheiro','Transferência','Cartão','Outro'];
   const DEFAULT_INV_CATEGORIES = ['Móveis','Eletrodomésticos','Eletrônicos','Cozinha','Decoração','Roupas','Ferramentas','Outros'];
@@ -196,6 +201,13 @@
       storyPostedAt: isISODateTime(raw.storyPostedAt) ? raw.storyPostedAt : null,
       listingUrl: raw.listingUrl || '',
       saleDate: raw.saleDate || null,
+      // Item de doação gravado antes de existir o ciclo só tinha o "já saiu de
+      // casa" (resolvedAt). Ele entra como "Doado", senão o deploy desfaria o
+      // que já estava resolvido — e o chip de Doar perderia o "N ok" de graça.
+      donationStatus: DONATION_STAGES.includes(raw.donationStatus) ? raw.donationStatus
+        : (raw.destination === 'Doar' && raw.resolvedAt ? 'Doado' : 'Não oferecido'),
+      // Para quem vai: o "comprador" da doação. Nunca sai do painel.
+      donee: raw.donee || '',
       resolvedAt: raw.resolvedAt || null,
       order: typeof raw.order === 'number' ? raw.order : 0,
       comments: Array.isArray(raw.comments) ? raw.comments : [],
@@ -206,6 +218,9 @@
   function isResolved(it){
     if(it.destination === 'A decidir') return false;
     if(it.destination === 'Vender')    return it.saleStatus === 'Vendido';
+    // Doação resolve pelo estágio, como venda — e não pelo resolvedAt, que aqui
+    // vira só o carimbo de quando "Doado" aconteceu.
+    if(it.destination === 'Doar')      return it.donationStatus === 'Doado';
     return !!it.resolvedAt;
   }
   function receivedOf(it){
@@ -301,7 +316,8 @@
         && (!f.risk        || !!itemRisk(it, ctx.moveDate, ctx.today))
         && (!f.storyOut    || storyExpired(it))
         && (!q || norm(it.title).includes(q) || norm(it.publicNotes).includes(q)
-               || norm(it.notes).includes(q) || norm(it.buyer).includes(q));
+               || norm(it.notes).includes(q) || norm(it.buyer).includes(q)
+               || norm(it.donee).includes(q));
   }
   function filterInvItems(list, f, ctx){
     const nf = normalizeInvFilter(f);
@@ -418,7 +434,7 @@
   }
 
   return {
-    DESTINATIONS, SALE_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
+    DESTINATIONS, SALE_STAGES, DONATION_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
     DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS, OWNERS, TASK_STATUSES, TASK_QUEUES,
     SHARE_SLUG_LEN, INV_FILTER_KEYS,
     norm, todayISO, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,

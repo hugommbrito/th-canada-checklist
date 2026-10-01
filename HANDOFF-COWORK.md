@@ -62,13 +62,18 @@ Em cada item, `venda.story` aparece quando o anúncio é um story do Instagram:
 `{ postadoEm, horasNoAr, venceu }`. **Story sai do ar 24h depois de postado** — um
 item "Anunciado" com `venceu: true` não está sendo mostrado a ninguém.
 
-`resolvido` significa: vendido, se o destino é Vender; marcado como "já saiu de
-casa", nos outros destinos. É o que mede o progresso da triagem.
+Item com destino *Doar* traz o bloco `doacao`: `{ status, paraQuem, doadoEm }`, com
+`status` em *Não oferecido / Oferecido / Prometido / Doado*. O total por estágio vem em
+`inventario.porStatusDeDoacao`. Um item *Prometido* é alguém que disse "eu quero" e
+ainda não buscou — vale cobrar quando fica parado.
 
-**Cuidado ao diferenciar:** o bloco `venda` é `null` em item que não vai à venda. Se
-um item mudou de *Vender* para *Doar*, o certo é dizer "mudou de destino", e não
-"status de venda virou nulo" — o segundo é artefato do diff, não algo que aconteceu.
-Pelo mesmo motivo, dinheiro em item não-vendável vem como `{ "cents": null,
+`resolvido` significa: vendido, se o destino é Vender; doado, se é Doar; marcado como
+"já saiu de casa", nos outros destinos. É o que mede o progresso da triagem.
+
+**Cuidado ao diferenciar:** os blocos `venda` e `doacao` são `null` em item de outro
+destino. Se um item mudou de *Vender* para *Doar*, o certo é dizer "mudou de destino",
+e não "status de venda virou nulo" — o segundo é artefato do diff, não algo que
+aconteceu. Pelo mesmo motivo, dinheiro em item não-vendável vem como `{ "cents": null,
 "brl": "—" }`: `null` é "não informado", que é diferente de zero.
 
 ---
