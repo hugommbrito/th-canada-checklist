@@ -798,7 +798,7 @@
     table-layout:fixed;                         /* sem isso as colunas dançam ao filtrar */
     font-size:13px;
   }
-  .w-exp{width:30px;} .w-photo{width:54px;} .w-name{width:auto;}
+  .w-sel{width:30px;} .w-exp{width:30px;} .w-photo{width:54px;} .w-name{width:auto;}
   .w-dest{width:100px;} .w-status{width:108px;} .w-owner{width:48px;}
   .w-prazo{width:80px;} .w-ask{width:112px;} .w-sold{width:124px;} .w-act{width:96px;}
 
@@ -830,6 +830,44 @@
   .inv-row.is-resolved{opacity:.72;}
   .inv-row.is-resolved .inv-name{text-decoration:line-through;}
   .inv-empty td{padding:34px 10px;text-align:center;font-style:italic;color:var(--ink-soft);}
+
+  /* ---- seleção para edição em lote ---- */
+  /* A caixa fica apagada até a linha ser tocada ou marcada: 80 checkboxes
+     acesos viram ruído numa tabela que já tem badge em metade das colunas. */
+  .c-sel,.h-sel{text-align:center;user-select:none;}
+  .c-sel input,.h-sel input{
+    width:14px;height:14px;margin:0;vertical-align:middle;cursor:pointer;
+    accent-color:var(--amber-dim);opacity:.35;
+  }
+  .inv-row:hover .c-sel input,.c-sel input:checked,.h-sel input:checked,
+  .h-sel input:indeterminate,.inv-table:hover .h-sel input{opacity:1;}
+  .inv-row.is-selected > td{background:rgba(232,163,61,0.16);}
+  .inv-row.is-selected:hover > td{background:rgba(232,163,61,0.22);}
+  /* No modo "editar itens da lista" a última coluna já é um checkbox com outro
+     significado; dois checkboxes por linha seria pedir para confundir. */
+  .inv-table.sel-off .w-sel,.inv-table.sel-off .c-sel,.inv-table.sel-off .h-sel{display:none;}
+
+  /* ---- edição na própria célula ---- */
+  /* Reset de <button> para o badge continuar parecendo badge. Vem ANTES das
+     regras de .dest-badge/.who/.m-ask de propósito: mesma especificidade, e a
+     última declarada vence — a aparência de cada badge é a de sempre. */
+  .inl{
+    border:none;background:none;padding:0;margin:0;font:inherit;color:inherit;
+    cursor:pointer;text-align:inherit;border-radius:5px;
+  }
+  .inl:hover,.inl:focus-visible{outline:1px dashed rgba(27,36,54,0.45);outline-offset:2px;}
+  .dest-badge.inl::after{content:'▾';margin-left:4px;opacity:.5;}
+  .c-ask .inl{display:block;width:100%;}
+  .inl-editor{
+    max-width:100%;box-sizing:border-box;
+    font-family:'Inter',sans-serif;font-size:12px;padding:3px 5px;
+    border:1px solid var(--amber-dim);border-radius:6px;background:#fff;color:var(--ink);
+  }
+  .inl-editor.money{font-family:'IBM Plex Mono',monospace;text-align:right;width:100px;}
+  /* A coluna de prazo tem 80px e "dd/mm/aaaa" não cabe: enquanto edita, o
+     campo transborda por cima da coluna vizinha em vez de aparecer cortado. */
+  .c-prazo .inl-editor{max-width:none;width:138px;position:relative;z-index:2;}
+  .sm-only .inl-editor{max-width:170px;}
 
   .inv-exp{
     border:none;background:none;cursor:pointer;color:var(--ink-soft);
@@ -913,7 +951,7 @@
   /* ---- linha de detalhe ---- */
   .inv-detail > td{
     background:rgba(0,0,0,0.035);border-bottom:1px dashed rgba(0,0,0,0.12);
-    padding:10px 14px 12px 46px;
+    padding:10px 14px 12px 76px;
   }
   .dt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 18px;margin-bottom:9px;}
   .dt-cell.wide{grid-column:1/-1;}
@@ -1167,6 +1205,27 @@
   .sh-editbar b{font-family:'Inter',sans-serif;font-size:13px;}
   .inv-row.share-out{opacity:.5;}
   .inv-row.share-out .inv-name{text-decoration:line-through;}
+  /* Barra de edição em lote: aparece com o primeiro item marcado. Navy, e não
+     o âmbar da barra das listas, para os dois modos não se confundirem. */
+  .bulk-bar{
+    display:none;align-items:center;gap:8px;flex-wrap:wrap;
+    background:var(--navy-800);border:1px solid var(--navy-700);
+    border-radius:9px;padding:8px 12px;margin-bottom:12px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--paper);
+  }
+  .bulk-bar.on{display:flex;}
+  .bulk-bar .bulk-count{font-weight:600;margin-right:4px;white-space:nowrap;}
+  .bulk-bar select,.bulk-bar input{
+    font-family:'Inter',sans-serif;font-size:12px;padding:5px 8px;
+    border-radius:7px;border:1px solid var(--navy-700);
+    background:var(--navy-900);color:var(--paper);color-scheme:dark;
+  }
+  .bulk-bar select:disabled{opacity:.4;cursor:not-allowed;}
+  .bulk-bar .bulk-date{display:inline-flex;gap:4px;align-items:center;}
+  .bulk-bar .add-btn.ghost{margin-left:0;font-size:12px;padding:5px 10px;}
+  .bulk-bar .add-btn.ghost.danger{color:#f0a9a2;border-color:#7a3c36;}
+  .bulk-bar .add-btn.ghost.danger:hover{background:var(--coral);color:#fff;border-color:var(--coral);}
+  .bulk-bar #bulkClear{margin-left:auto;}
 
   .inv-toast{
     position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
@@ -1225,14 +1284,18 @@
        próprio <col> é o que realmente a remove. */
     .w-dest,.w-status,.w-owner,.w-prazo,.w-sold,.w-act{display:none;}
     .w-name{width:auto;}
-    .w-exp{width:26px;} .w-photo{width:46px;} .w-ask{width:92px;}
+    .w-sel{width:26px;} .w-exp{width:26px;} .w-photo{width:46px;} .w-ask{width:92px;}
     .inv-wrap{max-height:none;overflow:visible;}
     .inv-table thead th{font-size:9px;padding:7px 6px;}
-    .c-dest,.c-status,.c-owner,.c-prazo,.c-sold,
-    .inv-table thead th:nth-child(4),.inv-table thead th:nth-child(5),
-    .inv-table thead th:nth-child(6),.inv-table thead th:nth-child(7),
-    .inv-table thead th:nth-child(9),.c-act,
-    .inv-table thead th:nth-child(10){display:none;}
+    .c-dest,.c-status,.c-owner,.c-prazo,.c-sold,.c-act,
+    .h-dest,.h-status,.h-owner,.h-prazo,.h-sold,.h-act{display:none;}
+    /* No celular o checkbox é o único jeito de selecionar, então fica sempre
+       aceso — não há hover para revelá-lo. */
+    .c-sel input,.h-sel input{opacity:1;width:16px;height:16px;}
+    .bulk-bar select{flex:1 1 40%;min-width:0;}
+    .bulk-bar .bulk-date{flex:1 1 100%;}
+    .bulk-bar .bulk-date input{flex:1 1 auto;min-width:0;}
+    .bulk-bar #bulkClear{margin-left:0;}
     .inv-row > td{padding:8px 6px;}
     .inv-thumb{width:36px;height:36px;}
     .sm-only{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;}
@@ -1385,26 +1448,42 @@
       <button class="add-btn" id="shareEditDone">Concluir</button>
     </div>
 
+    <div class="bulk-bar" id="bulkBar">
+      <span class="bulk-count" id="bulkCount"></span>
+      <select id="bulkDest" title="Destino"></select>
+      <select id="bulkStage" title="Status"></select>
+      <select id="bulkOwner" title="Responsável"></select>
+      <select id="bulkRoom" title="Cômodo"></select>
+      <select id="bulkCat" title="Categoria"></select>
+      <span class="bulk-date">
+        <input type="date" id="bulkDeadline" title="Prazo">
+        <button class="add-btn ghost" id="bulkDeadlineApply" title="Aplicar o prazo aos marcados — vazio remove o prazo">Prazo ✓</button>
+      </span>
+      <button class="add-btn ghost danger" id="bulkDelete">🗑 Excluir</button>
+      <button class="add-btn ghost" id="bulkClear" title="Esc também limpa">✕ Limpar seleção</button>
+    </div>
+
     <div class="inv-sheet">
       <div class="inv-wrap">
-        <table class="inv-table">
+        <table class="inv-table" id="invTable">
           <colgroup>
-            <col class="w-exp"><col class="w-photo"><col class="w-name"><col class="w-dest">
+            <col class="w-sel"><col class="w-exp"><col class="w-photo"><col class="w-name"><col class="w-dest">
             <col class="w-status"><col class="w-owner"><col class="w-prazo"><col class="w-ask">
             <col class="w-sold"><col class="w-act">
           </colgroup>
           <thead id="invHead">
             <tr>
+              <th class="h-sel"><input type="checkbox" id="invSelAll" title="Marcar todos os itens do filtro"></th>
               <th></th>
               <th>Foto</th>
               <th class="sortable" data-sort="title">Item<span class="arrow">⇅</span></th>
-              <th class="sortable" data-sort="destination">Destino<span class="arrow">⇅</span></th>
-              <th class="sortable" data-sort="saleStatus">Status<span class="arrow">⇅</span></th>
-              <th class="sortable" data-sort="owner">Resp<span class="arrow">⇅</span></th>
-              <th class="sortable" data-sort="deadline">Prazo<span class="arrow">⇅</span></th>
+              <th class="sortable h-dest" data-sort="destination">Destino<span class="arrow">⇅</span></th>
+              <th class="sortable h-status" data-sort="saleStatus">Status<span class="arrow">⇅</span></th>
+              <th class="sortable h-owner" data-sort="owner">Resp<span class="arrow">⇅</span></th>
+              <th class="sortable h-prazo" data-sort="deadline">Prazo<span class="arrow">⇅</span></th>
               <th class="sortable money" data-sort="askPrice">Pedido<span class="arrow">⇅</span></th>
-              <th class="sortable money" data-sort="soldPrice">Vendido<span class="arrow">⇅</span></th>
-              <th></th>
+              <th class="sortable money h-sold" data-sort="soldPrice">Vendido<span class="arrow">⇅</span></th>
+              <th class="h-act"></th>
             </tr>
           </thead>
           <tbody id="invBody"></tbody>
@@ -1767,7 +1846,7 @@ const INV_CATS_KEY = 'toronto-tracker-inv-categories';
 // estão lá junto das funções que dependem deles.
 const {
   DESTINATIONS, SALE_STAGES, DONATION_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
-  DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS,
+  DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS, OWNERS,
   norm, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
   newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
   fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem, normalizeAiSuggestion,
@@ -3007,9 +3086,11 @@ function stageRank(it){
 function destMeta(it){
   return DESTINATIONS.find(d => d.id === it.destination) || DESTINATIONS[0];
 }
+// Botão, e não span: o clique troca o destino ali mesmo (ver openInlineEditor).
 function destBadge(it){
   const d = destMeta(it);
-  return `<span class="dest-badge db-${d.cls}">${escapeHtml(d.id)}</span>`;
+  return `<button type="button" class="dest-badge db-${d.cls} inl" data-action="inv-inline" data-field="destination"
+    data-id="${escapeAttr(it.id)}" title="Clique para trocar o destino">${escapeHtml(d.id)}</button>`;
 }
 // Serve aos dois ciclos. As cores .st-0..4 são as da venda; a doação tem um
 // estágio a menos e pula a cor de "Negociando" (2), para "Doado" ter o verde
@@ -3071,8 +3152,13 @@ function invRowHtml(it){
   const shEdit = shareEditingList();
   const fora = shEdit ? shEdit.excluded.includes(it.id) : false;
   const marcas = shareMarks.get(it.id) || [];
+  const sel = invSelected.has(it.id);
+  const inl = (field, title, inner, cls) => `<button type="button" class="inl${cls ? ' ' + cls : ''}" data-action="inv-inline"
+      data-field="${field}" data-id="${escapeAttr(it.id)}" title="${escapeAttr(title)}">${inner}</button>`;
   return `
-  <tr class="inv-row dest-${d.cls}${done ? ' is-resolved' : ''}${sells ? '' : ' no-money'}${shEdit && fora ? ' share-out' : ''}" data-id="${escapeAttr(it.id)}">
+  <tr class="inv-row dest-${d.cls}${done ? ' is-resolved' : ''}${sells ? '' : ' no-money'}${shEdit && fora ? ' share-out' : ''}${sel ? ' is-selected' : ''}" data-id="${escapeAttr(it.id)}">
+    <td class="c-sel"><input type="checkbox" data-action="inv-select" data-id="${escapeAttr(it.id)}" ${sel ? 'checked' : ''}
+      title="Marcar para editar em lote (Shift+clique marca o intervalo)"></td>
     <td class="c-exp"><button class="inv-exp${open ? ' open' : ''}" data-action="inv-toggle" data-id="${escapeAttr(it.id)}" title="Detalhes">▸</button></td>
     <td class="c-photo">${thumbHtml(it)}</td>
     <td class="c-name">
@@ -3082,10 +3168,10 @@ function invRowHtml(it){
     </td>
     <td class="c-dest">${destBadge(it)}</td>
     <td class="c-status">${stageBadge(it) + (sells ? storyBadge(it) : '') || NA}</td>
-    <td class="c-owner"><span class="who" title="${escapeAttr(it.owner)}">${escapeHtml(ownerShort(it.owner))}</span></td>
-    <td class="c-prazo">${riskBadge(it) || NA}</td>
+    <td class="c-owner">${inl('owner', it.owner + ' · clique para trocar', escapeHtml(ownerShort(it.owner)), 'who')}</td>
+    <td class="c-prazo">${inl('deadline', 'Clique para alterar o prazo', riskBadge(it) || NA)}</td>
     <td class="c-ask money">${sells
-      ? `<span class="m-ask">${it.askPrice == null ? NA : fmtMoneyPlain(it.askPrice)}</span>${
+      ? `${inl('askPrice', 'Clique para alterar o preço pedido', it.askPrice == null ? NA : fmtMoneyPlain(it.askPrice), 'm-ask')}${
           it.minPrice != null ? `<span class="m-min" title="Preço mínimo — combinado nosso, não vai no anúncio">🔒 ${fmtMoneyPlain(it.minPrice)}</span>` : ''}`
       : NA}</td>
     <td class="c-sold money">${sells && it.saleStatus === 'Vendido'
@@ -3133,7 +3219,7 @@ function invDetailHtml(it){
   const doa = it.destination === 'Doar';
   return `
   <tr class="inv-detail" data-id="${escapeAttr(it.id)}">
-    <td colspan="10">
+    <td colspan="11">
       <div class="dt-grid">
         ${dtCell('Estado', it.condition)}
         ${dtCell('Anunciado em', it.channel, it.listingUrl || null)}
@@ -3213,9 +3299,13 @@ function renderInventory(){
   renderShareEditBar();
   renderInvChips();
   const list = sortItems(visibleItems());
+  // Seleção só sobre o que está na tela: o que o filtro escondeu sai dela, para
+  // uma ação em lote nunca alcançar um item que não dá para ver.
+  pruneSelection(list);
+  document.getElementById('invTable').classList.toggle('sel-off', !!shareEditingList());
   document.getElementById('invBody').innerHTML = list.length
     ? list.map(invRowHtml).join('')
-    : '<tr class="inv-empty"><td colspan="10">Nenhum item com esses filtros.</td></tr>';
+    : '<tr class="inv-empty"><td colspan="11">Nenhum item com esses filtros.</td></tr>';
 
   document.querySelectorAll('#invHead th[data-sort]').forEach(th=>{
     const on = th.dataset.sort === invSort.key;
@@ -3225,6 +3315,8 @@ function renderInventory(){
   });
 
   renderInvTotals(list);
+  paintSelectAll(list);
+  renderBulkBar();
 }
 
 function renderInvTotals(list){
@@ -3279,9 +3371,13 @@ function destColor(cls){
   return { vender:'#e8a33d', levar:'#3e8e7e', doar:'#6a5acd', descartar:'#a9a294', adecidir:'#c3bba8' }[cls] || '#c3bba8';
 }
 
+function knownRooms(){
+  const usados = [...new Set(invItems.map(i => i.room).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  return [...new Set([...DEFAULT_ROOMS, ...usados])];
+}
+
 function populateInvSelects(){
-  const uniq = f => [...new Set(invItems.map(f).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const rooms = [...new Set([...DEFAULT_ROOMS, ...uniq(i=>i.room)])];
+  const rooms = knownRooms();
 
   fillSelect(document.getElementById('invFilterCategory'), invCategories, 'Todas as categorias');
   fillSelect(document.getElementById('invFilterRoom'), rooms, 'Todos os cômodos');
@@ -3300,6 +3396,251 @@ function fillSelect(el, values, placeholder){
   el.innerHTML = (placeholder ? `<option value="">${escapeHtml(placeholder)}</option>` : '') +
     values.map(v => `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('');
   if(cur && values.includes(cur)) el.value = cur;
+}
+
+// ================= INVENTÁRIO: seleção e edição em lote =================
+// Ids marcados na primeira coluna. Vive fora do DOM porque render() recria as
+// linhas a cada mudança — e porque a ação em lote precisa da lista, não dos
+// checkboxes.
+const invSelected = new Set();
+let lastSelId = null;   // âncora do Shift+clique
+
+function selectedItems(){ return invItems.filter(it => invSelected.has(it.id)); }
+
+function pruneSelection(list){
+  const vis = new Set(list.map(i => i.id));
+  [...invSelected].forEach(id => { if(!vis.has(id)) invSelected.delete(id); });
+}
+
+function paintSelectAll(list){
+  const all = document.getElementById('invSelAll');
+  const n = list.filter(i => invSelected.has(i.id)).length;
+  all.checked = list.length > 0 && n === list.length;
+  all.indeterminate = n > 0 && n < list.length;
+}
+
+// Marca/desmarca sem redesenhar a tabela: redesenhar a cada clique faria o
+// scroll pular numa lista longa e o Shift+clique perder a referência visual.
+function paintSelection(){
+  const rows = [...document.querySelectorAll('#invBody tr.inv-row')];
+  rows.forEach(tr => {
+    const on = invSelected.has(tr.dataset.id);
+    tr.classList.toggle('is-selected', on);
+    const cb = tr.querySelector('input[data-action="inv-select"]');
+    if(cb) cb.checked = on;
+  });
+  paintSelectAll(rows.map(tr => ({ id: tr.dataset.id })));
+  renderBulkBar();
+}
+
+function clearSelection(){
+  if(!invSelected.size) return;
+  invSelected.clear();
+  lastSelId = null;
+  paintSelection();
+}
+
+document.getElementById('invSelAll').addEventListener('change', (e)=>{
+  const ids = [...document.querySelectorAll('#invBody tr.inv-row')].map(tr => tr.dataset.id);
+  ids.forEach(id => { if(e.target.checked) invSelected.add(id); else invSelected.delete(id); });
+  paintSelection();
+});
+
+// Esc limpa a seleção — se não houver modal aberto, que tem o Esc dele. O
+// editor inline segura o próprio Esc antes de chegar aqui.
+document.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Escape' || !invSelected.size) return;
+  if(document.querySelector('.modal-backdrop.open')) return;
+  clearSelection();
+});
+
+function fillBulkSelect(id, placeholder, values, opts){
+  const el = document.getElementById(id);
+  el.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>` +
+    values.map(v => `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('');
+  el.value = '';
+  el.disabled = !!(opts && opts.disabled);
+  el.title = (opts && opts.title) || placeholder.replace(/…$/, '');
+}
+
+// O select de status depende do que está marcado: venda e doação têm ciclos
+// diferentes, então só faz sentido com todos os itens no mesmo destino. E
+// "Vendido" fica de fora: pede preço, comprador e data, que o modal cobra.
+function bulkStageOptions(sel){
+  const dests = new Set(sel.map(i => i.destination));
+  if(dests.size === 1 && dests.has('Vender'))
+    return { placeholder:'Status da venda…', values: SALE_STAGES.filter(s => s !== 'Vendido') };
+  if(dests.size === 1 && dests.has('Doar'))
+    return { placeholder:'Status da doação…', values: DONATION_STAGES };
+  return { placeholder:'Status…', values:[], disabled:true,
+    title: dests.size > 1 ? 'Só com todos os itens no mesmo destino' : 'Só item à venda ou para doar tem status' };
+}
+
+function renderBulkBar(){
+  const bar = document.getElementById('bulkBar');
+  const sel = selectedItems();
+  const on = sel.length > 0 && !shareEditingList();
+  bar.classList.toggle('on', on);
+  if(!on) return;
+  document.getElementById('bulkCount').textContent =
+    sel.length + (sel.length === 1 ? ' item marcado' : ' itens marcados');
+  fillBulkSelect('bulkDest', 'Destino…', DESTINATIONS.map(d => d.id));
+  const st = bulkStageOptions(sel);
+  fillBulkSelect('bulkStage', st.placeholder, st.values, st);
+  fillBulkSelect('bulkOwner', 'Responsável…', OWNERS);
+  fillBulkSelect('bulkRoom', 'Cômodo…', knownRooms());
+  fillBulkSelect('bulkCat', 'Categoria…', invCategories);
+}
+
+// Aplica a mesma mudança a todos os marcados, grava uma vez e avisa. A
+// seleção continua: quem acabou de mandar seis itens para "Doar" provavelmente
+// quer marcar "Oferecido" neles em seguida.
+async function bulkApply(fn, label){
+  const sel = selectedItems();
+  if(!sel.length) return;
+  sel.forEach(it => { fn(it); stampEdit(it); });
+  render();
+  const gravou = await saveInventory();
+  if(gravou) toast(`${label} · ${sel.length} ${sel.length === 1 ? 'item' : 'itens'}`);
+}
+
+document.getElementById('bulkDest').addEventListener('change', (e)=>{
+  const v = e.target.value;
+  if(!v) return;
+  // Mesma regra do modal: trocar o destino não apaga o que o item tinha.
+  bulkApply(it => { it.destination = v; }, 'Destino → ' + v);
+});
+document.getElementById('bulkStage').addEventListener('change', (e)=>{
+  const v = e.target.value;
+  if(!v) return;
+  bulkApply(it => {
+    if(it.destination === 'Doar') setDonationStage(it, v);
+    else if(it.destination === 'Vender' && SALE_STAGES.includes(v) && v !== 'Vendido') it.saleStatus = v;
+  }, 'Status → ' + v);
+});
+document.getElementById('bulkOwner').addEventListener('change', (e)=>{
+  const v = e.target.value;
+  if(!v) return;
+  bulkApply(it => { it.owner = v; }, 'Responsável → ' + v);
+});
+document.getElementById('bulkRoom').addEventListener('change', (e)=>{
+  const v = e.target.value;
+  if(!v) return;
+  bulkApply(it => { it.room = v; }, 'Cômodo → ' + v);
+});
+document.getElementById('bulkCat').addEventListener('change', (e)=>{
+  const v = e.target.value;
+  if(!v) return;
+  bulkApply(it => { it.category = v; }, 'Categoria → ' + v);
+});
+document.getElementById('bulkDeadlineApply').addEventListener('click', ()=>{
+  const v = document.getElementById('bulkDeadline').value;
+  const n = invSelected.size;
+  if(!n) return;
+  if(!v && !confirm(`Remover o prazo de ${n} ${n === 1 ? 'item' : 'itens'}?`)) return;
+  bulkApply(it => { it.deadline = isISODate(v) ? v : null; }, v ? 'Prazo → ' + fmtDateBR(v) : 'Prazo removido');
+});
+document.getElementById('bulkDelete').addEventListener('click', async ()=>{
+  const sel = selectedItems();
+  if(!sel.length) return;
+  const n = sel.length;
+  if(!confirm(`Excluir ${n} ${n === 1 ? 'item' : 'itens'} do inventário?`)) return;
+  const ids = new Set(sel.map(i => i.id));
+  invItems = invItems.filter(x => !ids.has(x.id));
+  sel.forEach(it => { openPanels.delete('inv-' + it.id); commentDrafts.delete(it.id); });
+  invSelected.clear();
+  render();
+  const gravou = await saveInventory();
+  // Mesma regra da exclusão unitária: a foto só sai do disco depois de a
+  // exclusão ir para o banco — se a gravação falhar, o registro ainda aponta
+  // para ela.
+  if(gravou){
+    sel.forEach(it => it.photos.forEach(deletePhotoFile));
+    toast(`${n} ${n === 1 ? 'item excluído' : 'itens excluídos'}`);
+  }
+});
+document.getElementById('bulkClear').addEventListener('click', clearSelection);
+
+// ================= INVENTÁRIO: edição na própria célula =================
+// O badge vira o controle no lugar: trocar o destino de um item não deveria
+// custar abrir um modal de quinze campos. O editor é criado à mão e some no
+// próximo render() — que é justamente o que gravar ou cancelar provoca, então
+// não há estado de "célula em edição" para manter sincronizado.
+const INLINE_FIELDS = {
+  destination:{ kind:'select', options: ()=> DESTINATIONS.map(d => d.id) },
+  owner:      { kind:'select', options: ()=> OWNERS },
+  deadline:   { kind:'date' },
+  askPrice:   { kind:'money' },
+};
+
+function openInlineEditor(anchor, it, field){
+  const spec = INLINE_FIELDS[field];
+  if(!spec) return;
+  let el;
+  if(spec.kind === 'select'){
+    el = document.createElement('select');
+    el.innerHTML = spec.options().map(v => `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('');
+    el.value = it[field];
+  } else if(spec.kind === 'date'){
+    el = document.createElement('input');
+    el.type = 'date';
+    el.value = it.deadline || '';
+  } else {
+    el = document.createElement('input');
+    el.type = 'text';
+    el.inputMode = 'decimal';
+    el.placeholder = '1.200,00';
+    el.value = moneyToInput(it.askPrice);
+    el.classList.add('money');
+  }
+  el.classList.add('inl-editor');
+  el.setAttribute('aria-label', anchor.title || field);
+
+  let done = false;
+  const finish = (commit)=>{
+    if(done) return;
+    done = true;
+    if(commit) commitInline(it, field, el.value);
+    else render();
+  };
+  if(spec.kind === 'select'){
+    el.addEventListener('change', ()=> finish(true));
+    el.addEventListener('blur', ()=> finish(false));
+  } else {
+    // Não no 'change': no <input type=date> ele dispara enquanto o ano ainda
+    // está sendo digitado ("0002" já é uma data válida), e gravar ali
+    // destruiria o campo no meio da digitação. Grava ao sair ou no Enter.
+    el.addEventListener('blur', ()=> finish(true));
+  }
+  el.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); finish(false); }
+    else if(e.key === 'Enter' && spec.kind !== 'select'){ e.preventDefault(); finish(true); }
+  });
+  anchor.replaceWith(el);
+  el.focus();
+  // Abre o seletor nativo na hora — é o que o clique no badge pediu. Onde não
+  // existe (Safari antigo, iOS no select) o foco já basta: o 2º toque abre.
+  try{ if(el.showPicker) el.showPicker(); }catch(err){}
+}
+
+// Normaliza do jeito do modal, e só grava o que mudou: clicar e sair sem
+// mexer é um redesenho, não uma edição carimbada com data e autor.
+async function commitInline(it, field, raw){
+  let v;
+  if(field === 'destination')   v = DESTINATIONS.some(d => d.id === raw) ? raw : it.destination;
+  else if(field === 'owner')    v = OWNERS.includes(raw) ? raw : it.owner;
+  else if(field === 'deadline') v = isISODate(raw) ? raw : null;
+  else if(field === 'askPrice'){
+    v = parseMoney(raw);
+    // Vazio limpa o preço; texto que não é preço cancela — apagar R$ 1.200
+    // por causa de um dedo errado seria caro demais para um clique.
+    if(v == null && String(raw).trim()){ toast('Preço inválido — nada foi alterado'); render(); return; }
+  } else return;
+  if(v === it[field]){ render(); return; }
+  it[field] = v;
+  stampEdit(it);
+  render();
+  await saveInventory();
 }
 
 // ================= INVENTÁRIO: interações =================
@@ -3412,6 +3753,20 @@ document.addEventListener('click', async (e)=>{
   if(action === 'inv-edit'){ openInvModal(it); return; }
   if(action === 'inv-ad'){ openAdModal(it); return; }
   if(action === 'inv-zoom'){ openLightbox(it.photos, 0); return; }
+  if(action === 'inv-inline'){ openInlineEditor(el, it, el.dataset.field); return; }
+  if(action === 'inv-select'){
+    // Shift+clique marca o intervalo desde o último clicado, na ordem da tela.
+    const ids = [...document.querySelectorAll('#invBody tr.inv-row')].map(tr => tr.dataset.id);
+    let alvo = [id];
+    if(e.shiftKey && lastSelId && ids.includes(lastSelId) && ids.includes(id)){
+      const a = ids.indexOf(lastSelId), b = ids.indexOf(id);
+      alvo = ids.slice(Math.min(a, b), Math.max(a, b) + 1);
+    }
+    alvo.forEach(x => { if(el.checked) invSelected.add(x); else invSelected.delete(x); });
+    lastSelId = id;
+    paintSelection();
+    return;
+  }
 
   let refocus = null;
   let photosToDrop = [];
@@ -4315,6 +4670,7 @@ function renderShares(){
 
 function startShareEdit(sh){
   shareEditing = sh.id;
+  invSelected.clear();   // a coluna some neste modo; seleção escondida só confunde
   // A base da lista passa a ser o que está na tela: é a tabela do inventário
   // inteira — com busca, ordenação, foto e preço — servindo de seletor.
   Object.assign(invFilters, normalizeInvFilter(sh.filter));

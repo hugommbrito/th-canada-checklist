@@ -99,6 +99,47 @@ garante que a aba não seja usada, então o campo no topo da tabela cadastra com
 vêm depois, só nos itens que merecem. Duplicata é permitida: "Cadeira" seis vezes é
 resultado legítimo de varrer uma sala.
 
+### Editar na própria tabela
+
+A tabela é onde a triagem acontece, então o que ela mostra dá para mudar nela mesma, sem
+abrir o ✎: o badge de **destino** vira um dropdown no clique, o **responsável** também, o
+**prazo** vira um campo de data e o **preço pedido** um campo de valor, com a mesma
+normalização do modal (`1200` vira `1.200,00`; texto que não é preço cancela com aviso,
+em vez de apagar o preço que estava lá). O **status** já era assim: clique avança,
+Alt+clique volta. `Esc` cancela, e sair do campo sem mudar nada não carimba edição nenhuma.
+
+O editor é criado no lugar do badge e some no próximo redesenho, que é justamente o que
+gravar ou cancelar provoca — não há estado de "célula em edição" para manter sincronizado.
+No campo de data a gravação é ao sair ou no Enter, e não no `change`: digitando o ano,
+"0002" já é uma data válida, e gravar ali destruiria o campo no meio da digitação.
+
+O que precisa de mais de um dado continua no modal: "Vendido" (preço realizado, comprador,
+data), piso, fotos, descrições. E trocar o destino aqui segue a regra de sempre — não
+apaga nada do que o item tinha no destino anterior.
+
+### Edição em lote
+
+A primeira coluna é um checkbox. Com um item marcado aparece a barra de lote — destino,
+status, responsável, cômodo, categoria, prazo e excluir — aplicada a todos os marcados numa
+gravação só, com um toast dizendo quantos. Shift+clique marca o intervalo na ordem da tela;
+o checkbox do cabeçalho marca tudo que está no filtro; `Esc` ou "Limpar seleção" desmarca.
+
+A seleção é **só do que está na tela**: o que o filtro esconde sai dela. Uma ação em lote
+nunca alcança um item que não dá para ver — é a diferença entre "mudei estes 6" e "mudei 6
+e mais 2 que eu tinha esquecido que estavam marcados".
+
+O select de status depende do que está marcado, porque venda e doação têm ciclos
+diferentes: só habilita com todos os itens no mesmo destino, e "Vendido" fica de fora —
+pede preço, comprador e data, que o lote não tem como cobrar. Chegar em "Doado" em lote
+carimba o "saiu de casa" de cada item, igual ao clique no badge. A seleção continua depois
+da ação: quem acabou de mandar seis coisas para *Doar* provavelmente quer marcá-las como
+*Oferecido* em seguida.
+
+Excluir em lote pede confirmação e segue a regra da exclusão unitária: a foto só sai do
+disco depois de a exclusão ir para o banco. No modo "editar itens da lista" (🔗) a coluna
+de seleção some: a última coluna já é um checkbox com outro significado, e dois por linha
+seria pedir para confundir.
+
 ### Preço mínimo é privado
 
 Cada item à venda guarda o preço pedido e um **piso de negociação** (🔒). O piso nunca
