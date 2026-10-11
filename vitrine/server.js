@@ -171,22 +171,33 @@ function paraViewModel(slug, d) {
   const itens = (d.itens || []).map(it => {
     const nomes = (it.fotos || []).filter(n => NOME_FOTO_RE.test(n));
     nomes.forEach(n => fotos.add(n));
+    // Doação não tem preço: nem "a combinar", que é a venda sem valor definido.
+    const doacao = !!it.doacao;
+    const cents = (!doacao && it.preco && it.preco.cents != null) ? it.preco.cents : null;
     return {
       id: it.id,
       nome: it.nome,
       estado: it.estado,
       descricao: it.descricao,
-      cents: it.preco ? it.preco.cents : null,
-      precoTexto: (it.preco && it.preco.cents != null) ? it.preco.brl : 'a combinar',
+      doacao,
+      cents,
+      precoTexto: doacao ? 'doação' : (cents != null ? it.preco.brl : 'a combinar'),
       reservado: !!it.reservado,
       fotos: nomes.map(n => `/f/${encodeURIComponent(slug)}/${encodeURIComponent(n)}`),
     };
   });
   const lista = d.lista || {};
+  // O escopo da lista decide título e textos. Painel sem `inclui` (versão
+  // anterior) só mandava venda, então venda é o que se assume.
+  const inc = lista.inclui || {};
+  const temDoacao = !!inc.doacao;
+  const temVenda = !!inc.venda || !temDoacao;
   return {
     vm: {
       chave: slug,
-      titulo: 'Itens à venda',
+      titulo: temVenda && temDoacao ? 'Itens à venda e para doação' : temDoacao ? 'Itens para doação' : 'Itens à venda',
+      venda: temVenda,
+      doacao: temDoacao,
       recado: lista.recado || '',
       whatsapp: String(lista.whatsapp || '').replace(/\D/g, ''),
       validade: lista.validade || null,

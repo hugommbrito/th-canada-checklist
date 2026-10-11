@@ -88,8 +88,9 @@ chegar em *Doado* grava a hora, voltar de *Doado* apaga — voltar é desfazer u
 errado. Item de doação gravado antes de existir o ciclo, com o checkbox marcado, entra
 como *Doado* na primeira leitura; sem isso o deploy desfaria o que já estava resolvido.
 
-Doação **não vai para a vitrine**: as listas públicas continuam mostrando só o que está
-à venda.
+Doação também pode ir para a vitrine — cada lista compartilhada escolhe se mostra venda,
+doação ou as duas (ver *Listas compartilhadas*). Lá o item aparece sem preço, com a etiqueta
+"doação"; *Prometido* aparece como reservado e *Doado* sai sozinho, como *Vendido*.
 
 ### Captura rápida
 
@@ -310,12 +311,12 @@ Voltar para a aba também recarrega (sem polling): no celular isso acontece a ca
 desbloqueio, que é o ritmo da triagem. O que estava em digitação nos últimos instantes é
 gravado antes da recarga, não depende de sorte.
 
-## Listas de venda (a vitrine pública)
+## Listas compartilhadas (a vitrine pública)
 
-Uma lista de venda é um **link próprio, por audiência**: a família vê um conjunto de itens
-antes de os amigos verem outro. Quem abre marca o que quer e cai no WhatsApp com a mensagem
-já escrita — nada é gravado do outro lado, sem formulário, sem cadastro, sem guardar dado de
-ninguém.
+Uma lista compartilhada é um **link próprio, por audiência**: a família vê um conjunto de
+itens antes de os amigos verem outro. Quem abre marca o que quer e cai no WhatsApp com a
+mensagem já escrita — nada é gravado do outro lado, sem formulário, sem cadastro, sem guardar
+dado de ninguém.
 
 No painel, `🔗 Listas` na barra do inventário. Cada lista tem nome (só vocês veem), um
 número de WhatsApp próprio, um recado no topo da página, validade opcional, liga/desliga e
@@ -325,9 +326,28 @@ filtro entra sozinho, o que a tela avisa em uma linha. Editar as exclusões acon
 própria tabela do inventário: a última coluna vira checkbox, com busca, foto e preço no
 lugar de sempre.
 
-Item **vendido sai da lista sozinho** e a foto dele deixa de ser servida. Item **reservado**
-continua visível, marcado, e não é selecionável. Item sem preço aparece como "a combinar" e
-o painel avisa quantos são.
+### Venda, doação ou as duas
+
+Cada lista tem um **escopo** (`destinos`): só itens à venda, só doações, ou os dois numa
+página só — "o sofá é R$ 1.200, a estante é de graça". O chip de destino da tela decide o
+escopo na criação (*Vender* ou *Doar* ativo faz uma lista só daquilo; sem chip entra tudo
+que é publicável), e o select **Mostra** no card muda depois. Os outros destinos — *A
+decidir*, *Levar*, *Descartar* — não entram em lista nenhuma: triagem não é vitrine.
+
+Na página, item de doação aparece **sem preço**, com a etiqueta "doação" — nem "a combinar",
+que é venda sem valor definido. O `askPrice` que ele possa carregar de quando era *Vender*
+não sai (`publicPrice`), e "para quem" é tão privado quanto o comprador. *Prometido* aparece
+como reservado, igual a *Reservado*; *Doado* sai da lista sozinho, igual a *Vendido*. Na
+mensagem do WhatsApp a doação vai como "— doação" e fica fora do total e do "a combinar".
+
+Lista gravada antes de existir o escopo **continua sendo só de venda**: o link já circulou,
+e passar a mostrar as doações sem ninguém pedir seria uma mudança silenciosa numa página
+pública. O escopo mora fora do filtro (`filter.destination` continua zerado ao salvar): um
+filtro com "A decidir" gravado seria uma lista vazia para sempre, com o link abrindo.
+
+Item **vendido ou doado sai da lista sozinho** e a foto dele deixa de ser servida. Item
+**reservado ou prometido** continua visível, marcado, e não é selecionável. Item à venda sem
+preço aparece como "a combinar" e o painel avisa quantos são.
 
 ### Por que dois serviços
 
@@ -347,8 +367,11 @@ aparecer nela.
 log de proxy). A resposta é uma **allowlist escrita à mão** (`vitrineItemView` em
 `server.js`), irmã da `itemView` do snapshot e deliberadamente não derivada dela: com um
 `delete` sobre a outra, o campo que o item ganhar em 2027 vazaria por default. Sai `{ id,
-nome, estado, descricao, preco:{cents,brl}, reservado, fotos }` — e `fotos` são só nomes de
-arquivo, para a vitrine ser obrigada a montar a URL do proxy dela.
+nome, estado, descricao, doacao, preco:{cents,brl}, reservado, fotos }` — `preco` é `null`
+(e não `{cents:null}`) quando `doacao` é `true`, para a página distinguir "de graça" de "a
+combinar" — e `fotos` são só nomes de arquivo, para a vitrine ser obrigada a montar a URL do
+proxy dela. Em `lista` vai `inclui:{venda,doacao}`, o escopo, de onde a página tira o título
+("Itens à venda", "Itens para doação", "Itens à venda e para doação") e os textos do rodapé.
 
 Não existe `VITRINE_TOKEN` opcional: sem a variável a rota responde **503**. Ao contrário do
 snapshot, esta é consumida por um serviço exposto à internet, e "aberta por esquecimento" não

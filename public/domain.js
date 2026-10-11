@@ -69,6 +69,12 @@
   const SHARE_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,62})[a-z0-9]$/;
   // Teto para o blob não crescer sem limite; a casa inteira não passa de 200 itens.
   const MAX_SHARE_EXCLUDED = 500;
+  // Destinos que podem aparecer numa lista pública: venda e doação. Os dois têm
+  // um ciclo com "alguém disse eu quero" (Reservado / Prometido) e um estágio
+  // final que tira o item da página (Vendido / Doado). "A decidir", "Levar" e
+  // "Descartar" não têm o que oferecer a ninguém — triagem não é vitrine.
+  // Cada lista escolhe um subconjunto disto (ver normalizeShareDestinations).
+  const PUBLIC_DESTINATIONS = ['Vender','Doar'];
 
   function todayISO(tz){
     // Com timeZone explícito o "hoje" é o de quem usa o painel, não o do
@@ -488,15 +494,31 @@
     // item entrando na lista porque o story dele venceu. Ninguém pediu isso.
     f.risk = false;
     f.storyOut = false;
-    // Destino também não: vitrine é sempre "Vender", e isPublicItem já garante
-    // isso. Guardá-lo não acrescenta nada e cria uma armadilha silenciosa —
-    // criar a lista com o chip "A decidir" (ou "Levar", ou "Doar") ativo salva
-    // um filtro que só admite itens que o isPublicItem depois recusa, e a
-    // lista nasce vazia PARA SEMPRE, com o link abrindo normalmente. As duas
-    // condições são mutuamente exclusivas, então o conjunto é vazio por
-    // construção. Zerar aqui é o que impede a combinação de existir.
+    // Destino também não: o que a lista mostra é `destinos` (venda, doação ou
+    // os dois), decidido na criação a partir deste chip e editável depois no
+    // card. Guardá-lo aqui também criaria uma armadilha silenciosa — a lista
+    // criada com o chip "A decidir" (ou "Levar", ou "Descartar") ativo salvaria
+    // um filtro que só admite itens que isPublicItem depois recusa, e nasceria
+    // vazia PARA SEMPRE, com o link abrindo normalmente. Zerar aqui é o que
+    // impede a combinação de existir.
     f.destination = '';
     return f;
+  }
+  // Lista gravada antes de existir `destinos` continua sendo só de venda, como
+  // sempre foi: o link já circulou, e ele passar a mostrar as doações sem
+  // ninguém pedir seria uma mudança silenciosa numa página pública.
+  function normalizeShareDestinations(raw){
+    const list = Array.isArray(raw) ? raw.filter(d => PUBLIC_DESTINATIONS.includes(d)) : [];
+    const out = PUBLIC_DESTINATIONS.filter(d => list.includes(d));   // ordem fixa
+    return out.length ? out : ['Vender'];
+  }
+  // O chip de destino da tela decide o escopo da lista nova: "Vender" ou "Doar"
+  // ativo faz uma lista só daquilo; sem chip (ou com um chip que não é
+  // público) a lista mostra tudo que é publicável — a base é o que a tela
+  // mostra, restrito ao que pode sair.
+  function shareDestinationsFromFilter(f){
+    const d = f && f.destination;
+    return PUBLIC_DESTINATIONS.includes(d) ? [d] : PUBLIC_DESTINATIONS.slice();
   }
   function normalizeShare(raw){
     raw = raw || {};
@@ -513,6 +535,9 @@
       whatsapp: onlyDigits(raw.whatsapp, 10, 15),
       active: raw.active !== false,          // nasce ligada
       expiresAt: isISODate(raw.expiresAt) ? raw.expiresAt : null,
+      // O que entra: ['Vender'], ['Doar'] ou os dois. Separado do filtro para
+      // a lista antiga (sem o campo) continuar sendo só de venda.
+      destinos: normalizeShareDestinations(raw.destinos),
       filter: normalizeShareFilter(raw.filter),
       excluded: Array.isArray(raw.excluded)
         ? [...new Set(raw.excluded.filter(x => typeof x === 'string' && x))].slice(0, MAX_SHARE_EXCLUDED)
@@ -538,19 +563,39 @@
     if(share.expiresAt && share.expiresAt < (today || todayISO())) return 'vencida';
     return 'ativa';
   }
-  // O que pode aparecer numa lista pública. Mora aqui, e não na rota, porque a
-  // tela de gestão precisa contar exatamente os mesmos itens que a vitrine vai
+  // O que um item é para quem está do lado de fora: 'venda', 'doacao' ou
+  // null (não tem o que mostrar). Mora aqui, e não na rota, porque a tela de
+  // gestão precisa contar exatamente os mesmos itens que a vitrine vai
   // mostrar: dizer "12 itens" e a página mostrar 9 acaba com a confiança na tela.
-  function isPublicItem(it){
-    if(it.destination !== 'Vender') return false;   // triagem não é vitrine
-    if(it.saleStatus === 'Vendido') return false;   // vendido sai sozinho
-    if(isResolved(it)) return false;                // rede de segurança
-    return !!it.title;
+  function publicKind(it){
+    if(!it.title) return null;
+    if(it.destination === 'Vender') return it.saleStatus === 'Vendido' ? null : 'venda';      // vendido sai sozinho
+    if(it.destination === 'Doar')   return it.donationStatus === 'Doado' ? null : 'doacao';   // doado também
+    return null;   // triagem não é vitrine
+  }
+  // Com `share`, responde se o item cabe NAQUELA lista (escopo de venda e/ou
+  // doação); sem, se cabe em alguma.
+  function isPublicItem(it, share){
+    if(!publicKind(it) || isResolved(it)) return false;   // isResolved: rede de segurança
+    return !share || share.destinos.includes(it.destination);
+  }
+  // "Alguém já disse eu quero": Reservado na venda, Prometido na doação. A
+  // página mostra o item marcado e não deixa escolher.
+  function isPublicReserved(it){
+    if(it.destination === 'Vender') return it.saleStatus === 'Reservado';
+    if(it.destination === 'Doar')   return it.donationStatus === 'Prometido';
+    return false;
+  }
+  // Preço que pode sair: só de quem está à venda. Item de doação pode carregar
+  // um askPrice de quando era "Vender" (trocar o destino nunca apaga nada), e
+  // esse número não é de ninguém de fora.
+  function publicPrice(it){
+    return it.destination === 'Vender' ? it.askPrice : null;
   }
   function shareItems(list, share, ctx){
     const fora = new Set(share.excluded);
     return filterInvItems(list, share.filter, ctx)
-      .filter(it => !fora.has(it.id) && isPublicItem(it));
+      .filter(it => !fora.has(it.id) && isPublicItem(it, share));
   }
   function waLink(whatsapp, text){
     const fone = onlyDigits(whatsapp, 10, 15);
@@ -561,7 +606,7 @@
   return {
     DESTINATIONS, SALE_STAGES, DONATION_STAGES, CONDITIONS, PAYMENT_METHODS, DEFAULT_INV_CATEGORIES,
     DEFAULT_ROOMS, INV_UNCATEGORIZED, STORY_TTL_H, MAX_PHOTOS, OWNERS, TASK_STATUSES, TASK_QUEUES,
-    SHARE_SLUG_LEN, INV_FILTER_KEYS,
+    SHARE_SLUG_LEN, INV_FILTER_KEYS, PUBLIC_DESTINATIONS,
     norm, todayISO, daysBetween, fmtDate, fmtDateBR, fmtDateTime, fmtAge,
     newInvId, newReceiptId, newShareId, isISODate, isISODateTime, parseMoney, toCents,
     fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizePhotos, normalizeItem,
@@ -570,6 +615,7 @@
     itemRisk, invTotals,
     normalizeInvFilter, matchesInvFilter, filterInvItems, similarTitles,
     newShareSlug, isShareSlug, normalizeShare, normalizeShareStore, shareStatus,
-    isPublicItem, shareItems, waLink,
+    normalizeShareDestinations, shareDestinationsFromFilter,
+    publicKind, isPublicItem, isPublicReserved, publicPrice, shareItems, waLink,
   };
 });

@@ -335,8 +335,13 @@ function vitrineItemView(it) {
     // publicNotes, nunca notes: as observações são internas e é exatamente
     // onde mora "aceito 850" ou "combinado com o vizinho". Sem fallback.
     descricao: it.publicNotes || null,
-    preco: money(it.askPrice),
-    reservado: it.saleStatus === 'Reservado',
+    // Doação não tem preço — nem o askPrice de quando o item era "Vender",
+    // que publicPrice já deixa de fora. `null`, e não {cents:null}: a vitrine
+    // precisa distinguir "de graça" de "a combinar".
+    doacao: it.destination === 'Doar',
+    preco: it.destination === 'Doar' ? null : money(D.publicPrice(it)),
+    // Reservado na venda, Prometido na doação: a página mostra marcado.
+    reservado: D.isPublicReserved(it),
     // Só o nome do arquivo. A vitrine é obrigada a montar a URL do proxy dela,
     // e assim o domínio do painel não tem por onde escapar para o HTML de quem
     // recebe o link.
@@ -348,12 +353,13 @@ function vitrineItemView(it) {
 // quem tem foto antes de quem não tem, mais caro primeiro, nome como desempate
 // estável — a página não pode embaralhar entre duas visitas.
 function vitrineOrder(a, b) {
-  const res = (a.saleStatus === 'Reservado') - (b.saleStatus === 'Reservado');
+  const res = D.isPublicReserved(a) - D.isPublicReserved(b);
   if (res) return res;
   const foto = (b.photos.length > 0) - (a.photos.length > 0);
   if (foto) return foto;
-  const pa = a.askPrice == null ? -1 : a.askPrice;
-  const pb = b.askPrice == null ? -1 : b.askPrice;
+  // Doação e "a combinar" ficam depois de quem tem preço.
+  const pa = D.publicPrice(a) == null ? -1 : D.publicPrice(a);
+  const pb = D.publicPrice(b) == null ? -1 : D.publicPrice(b);
   if (pa !== pb) return pb - pa;
   return String(a.title).localeCompare(String(b.title), 'pt-BR');
 }
@@ -419,6 +425,12 @@ app.get('/api/vitrine/:slug', (req, res) => {
       recado: share.intro || null,
       whatsapp: share.whatsapp,
       validade: share.expiresAt,
+      // O escopo, para a página escolher título e textos ("Itens à venda" vs
+      // "Itens para doação") sem depender do que sobrou na lista.
+      inclui: {
+        venda: share.destinos.includes('Vender'),
+        doacao: share.destinos.includes('Doar'),
+      },
     },
     total: itens.length,
     itens: itens.map(vitrineItemView),

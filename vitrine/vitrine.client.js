@@ -40,18 +40,28 @@
   sel.forEach(function(id){ if(!vivos[id]){ sel.delete(id); limpou = true; } });
   if(limpou) gravarSel(sel);
 
+  // Três tipos de linha: com preço, "a combinar" (venda sem preço) e doação.
+  // Doação não entra na soma nem no "a combinar" — não é dinheiro em aberto.
+  function infoDe(c){
+    return {
+      doacao: c.dataset.doacao === '1',
+      cents: c.dataset.cents === '' ? null : Number(c.dataset.cents)
+    };
+  }
+
   function mensagem(){
     var linhas = ['Oi! Vi a lista de itens da mudança e tenho interesse em:', ''];
-    var soma = 0, semPreco = 0;
+    var soma = 0, semPreco = 0, doacoes = 0;
     cards.forEach(function(c){
       if(!sel.has(c.dataset.id)) return;
-      var cents = c.dataset.cents === '' ? null : Number(c.dataset.cents);
-      if(cents == null) semPreco++; else soma += cents;
-      linhas.push('• ' + c.dataset.nome + ' — ' + (cents == null ? 'a combinar' : moeda(cents)));
+      var i = infoDe(c);
+      if(i.doacao) doacoes++; else if(i.cents == null) semPreco++; else soma += i.cents;
+      linhas.push('• ' + c.dataset.nome + ' — ' + (i.doacao ? 'doação' : i.cents == null ? 'a combinar' : moeda(i.cents)));
     });
     linhas.push('');
     if(soma) linhas.push('Total dos itens com preço: ' + moeda(soma));
     if(semPreco) linhas.push(semPreco === 1 ? '(1 item a combinar)' : '(' + semPreco + ' itens a combinar)');
+    if(doacoes) linhas.push(doacoes === 1 ? '(1 item em doação)' : '(' + doacoes + ' itens em doação)');
     // O endereço da própria lista, para quem recebe saber de qual link a pessoa
     // veio. Não revela nada novo: quem está lendo já tem essa URL.
     if(URL_LISTA) linhas.push('Lista: ' + URL_LISTA);
@@ -61,7 +71,7 @@
   }
 
   function pintar(){
-    var n = 0, soma = 0, semPreco = 0;
+    var n = 0, soma = 0, semPreco = 0, doacoes = 0;
     cards.forEach(function(c){
       var on = sel.has(c.dataset.id);
       c.classList.toggle('is-sel', on);
@@ -69,16 +79,18 @@
       if(box) box.checked = on;
       if(on){
         n++;
-        var cents = c.dataset.cents === '' ? null : Number(c.dataset.cents);
-        if(cents == null) semPreco++; else soma += cents;
+        var i = infoDe(c);
+        if(i.doacao) doacoes++; else if(i.cents == null) semPreco++; else soma += i.cents;
       }
     });
     if(barN){
       barN.textContent = n === 0 ? 'Nenhum item' : (n === 1 ? '1 item' : n + ' itens');
-      barTotal.textContent = n === 0
-        ? 'marque o que te interessa'
-        // Sem nenhum item com preço, "R$ 0" seria mentira: some o valor.
-        : (soma ? moeda(soma) : '') + (semPreco ? (soma ? ' + ' : '') + semPreco + ' a combinar' : '');
+      // Sem nenhum item com preço, "R$ 0" seria mentira: some o valor.
+      var partes = [];
+      if(soma) partes.push(moeda(soma));
+      if(semPreco) partes.push(semPreco + ' a combinar');
+      if(doacoes) partes.push(doacoes === 1 ? '1 doação' : doacoes + ' doações');
+      barTotal.textContent = n === 0 ? 'marque o que te interessa' : partes.join(' + ');
     }
     if(cta){
       cta.classList.toggle('vt-cta--off', n === 0);

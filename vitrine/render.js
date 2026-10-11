@@ -48,14 +48,16 @@ ${FONTES}
 }
 
 // Cartão de item. `it` já vem com { id, nome, estado, descricao, precoTexto,
-// cents, reservado, fotos:[url do proxy] } — nada de dado bruto do painel.
+// cents, doacao, reservado, fotos:[url do proxy] } — nada de dado bruto do painel.
 function card(it){
   const capa = it.fotos[0];
   const fotos = it.fotos.join('|');
+  // Doação: "doação" no lugar do preço, com cara de etiqueta e não de valor.
+  const precoCls = it.doacao ? ' vt-price--gift' : (it.cents == null ? ' vt-price--open' : '');
   return `
   <article class="vt-card${it.reservado ? ' is-res' : ''}" data-id="${esc(it.id)}"
     data-nome="${esc(it.nome)}" data-cents="${it.cents == null ? '' : it.cents}"
-    data-preco="${esc(it.precoTexto)}">
+    data-doacao="${it.doacao ? '1' : ''}" data-preco="${esc(it.precoTexto)}">
     <div class="vt-shot" ${it.fotos.length ? `data-fotos="${esc(fotos)}"` : ''}>
       ${capa
         ? `<img class="vt-photo" src="${esc(capa)}" alt="${esc(it.nome)}" loading="lazy" decoding="async">`
@@ -68,7 +70,7 @@ function card(it){
       ${it.descricao ? `<p class="vt-desc">${nl2br(it.descricao)}</p>` : ''}
       <div class="vt-meta">
         <span class="vt-cond">${esc(it.estado)}</span>
-        <span class="vt-price${it.cents == null ? ' vt-price--open' : ''}">${esc(it.precoTexto)}</span>
+        <span class="vt-price${precoCls}">${esc(it.precoTexto)}</span>
       </div>
     </div>
     ${it.reservado
@@ -78,9 +80,13 @@ function card(it){
   </article>`;
 }
 
-// vm = { titulo, recado, itens[], atualizadoEm, atrasado, whatsapp, urlDaLista, canonical }
+// vm = { titulo, venda, doacao, recado, itens[], atualizadoEm, atrasado, whatsapp, urlDaLista, canonical }
 function pagina(vm, o){
   const selecionaveis = vm.itens.filter(i => !i.reservado).length;
+  // Os textos que falam de preço e pagamento só fazem sentido com venda na lista.
+  const vazio = vm.venda && vm.doacao ? 'Tudo já saiu ou está reservado.'
+    : vm.doacao ? 'Tudo já foi doado ou prometido.'
+    : 'Tudo já foi vendido ou reservado.';
   return cabeca(vm.titulo, o) + `
 <body data-wa="${esc(vm.whatsapp || '')}" data-url="${esc(vm.urlDaLista || '')}" data-chave="${esc(vm.chave)}">
 <header class="vt-head stub-line">
@@ -99,11 +105,11 @@ ${vm.itens.length
       ? 'Marque o que te interessa e toque em “Tenho interesse” — abre o WhatsApp com a lista pronta.'
       : 'Fale com quem te mandou este link para combinar.'}</p>
 <main class="vt-grid">${vm.itens.map(card).join('')}</main>`
-  : `<p class="vt-empty">Tudo já foi vendido ou reservado. Obrigado pelo interesse!</p>`}
+  : `<p class="vt-empty">${vazio} Obrigado pelo interesse!</p>`}
 
 <footer class="vt-foot">
-  ${vm.atualizadoEm ? `<p class="vt-foot-when${vm.atrasado ? ' vt-stale' : ''}">Preços atualizados em ${esc(vm.atualizadoEm)}.</p>` : ''}
-  <p class="vt-foot-dim">Retirada e pagamento combinados direto com a gente.</p>
+  ${vm.atualizadoEm ? `<p class="vt-foot-when${vm.atrasado ? ' vt-stale' : ''}">${vm.venda ? 'Preços atualizados' : 'Lista atualizada'} em ${esc(vm.atualizadoEm)}.</p>` : ''}
+  <p class="vt-foot-dim">${vm.venda ? 'Retirada e pagamento combinados' : 'Retirada combinada'} direto com a gente.</p>
   <button class="vt-print" type="button">Salvar em PDF / imprimir</button>
 </footer>
 

@@ -1824,11 +1824,11 @@
 
 <div class="modal-backdrop" id="shareBackdrop">
   <div class="modal wide">
-    <h2>Listas de venda</h2>
+    <h2>Listas compartilhadas</h2>
     <p style="font-size:11px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;margin:0 0 14px;">
-      Cada lista é um link próprio, com os itens que você escolher. Quem abre marca o que quer e
-      cai no seu WhatsApp com a mensagem pronta. Piso de negociação, comprador e observações
-      internas nunca saem daqui.
+      Cada lista é um link próprio, com os itens que você escolher — à venda, para doação ou os
+      dois. Quem abre marca o que quer e cai no seu WhatsApp com a mensagem pronta. Piso de
+      negociação, comprador, para quem vai a doação e observações internas nunca saem daqui.
     </p>
 
     <div class="field">
@@ -1881,7 +1881,8 @@ const {
   fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem, normalizeAiSuggestion,
   isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
   normalizeInvFilter, filterInvItems, similarTitles,
-  newShareSlug, normalizeShare, normalizeShareStore, shareStatus, isPublicItem,
+  newShareSlug, normalizeShare, normalizeShareStore, shareStatus, isPublicItem, publicKind,
+  shareDestinationsFromFilter,
 } = Painel;
 
 const todayISO = Painel.todayISO;
@@ -2172,6 +2173,27 @@ function shareBaseOf(sh){
 }
 function sharesOf(it){
   return shareStore.lists.filter(sh => shareItemsOf(sh).some(x => x.id === it.id));
+}
+// O escopo de uma lista — o que ela mostra — como opção de <select>. O id é
+// `destinos` em texto, na ordem fixa que normalizeShareDestinations devolve.
+const SHARE_SCOPES = [
+  { id:'Vender,Doar', label:'Venda e doação' },
+  { id:'Vender',      label:'Só itens à venda' },
+  { id:'Doar',        label:'Só doações' },
+];
+function shareScopeId(sh){ return sh.destinos.join(','); }
+function shareScopeLabel(sh){
+  const s = SHARE_SCOPES.find(x => x.id === shareScopeId(sh));
+  return s ? s.label.toLowerCase() : '';
+}
+// O tooltip do checkbox no modo "editar itens": por que o item (não) entra.
+function sharePickTitle(it, sh){
+  if(isPublicItem(it, sh)) return 'Aparece na lista';
+  if(!it.title) return 'Não pode aparecer: item sem nome';
+  if(it.destination === 'Vender' && it.saleStatus === 'Vendido') return 'Não pode aparecer: já vendido';
+  if(it.destination === 'Doar' && it.donationStatus === 'Doado') return 'Não pode aparecer: já doado';
+  if(!publicKind(it)) return 'Não pode aparecer: só item à venda ou para doar entra';
+  return 'Não pode aparecer: esta lista mostra ' + shareScopeLabel(sh);
 }
 
 async function saveInvCategories(){
@@ -3211,8 +3233,8 @@ function invRowHtml(it){
       : NA}</td>
     <td class="c-act">${shEdit ? `
       <input type="checkbox" data-action="inv-share-pick" data-id="${escapeAttr(it.id)}"
-        ${fora ? '' : 'checked'} ${isPublicItem(it) ? '' : 'disabled'}
-        title="${isPublicItem(it) ? 'Aparece na lista' : 'Não pode aparecer: só item à venda e não vendido entra'}">`
+        ${fora ? '' : 'checked'} ${isPublicItem(it, shEdit) ? '' : 'disabled'}
+        title="${escapeAttr(sharePickTitle(it, shEdit))}">`
     : `
       <button data-action="inv-edit" data-id="${escapeAttr(it.id)}" title="Editar">✎</button>
       ${sells ? `<button data-action="inv-ad" data-id="${escapeAttr(it.id)}" title="Gerar texto do anúncio">📋</button>` : '<span class="act-gap">·</span>'}
@@ -4640,7 +4662,7 @@ function shareFilterChips(sh){
   if(f.room) chips.push('cômodo: ' + f.room);
   if(f.owner) chips.push('resp: ' + f.owner);
   if(f.q) chips.push('busca: "' + f.q + '"');
-  if(!chips.length) chips.push('sem filtro — todo o inventário à venda');
+  if(!chips.length) chips.push('sem outro filtro — todo o inventário');
   return chips.map(c => `<span class="sh-chip">${escapeHtml(c)}</span>`).join('');
 }
 
@@ -4649,15 +4671,27 @@ function shareCompHtml(sh){
   const base = shareBaseOf(sh);
   const dentro = shareItemsOf(sh);
   const excl = new Set(sh.excluded);
-  const vendidos = base.filter(i => i.destination === 'Vender' && i.saleStatus === 'Vendido').length;
-  const foraDestino = base.filter(i => i.destination !== 'Vender').length;
-  const excluidos = base.filter(i => excl.has(i.id) && isPublicItem(i)).length;
-  const semPreco = dentro.filter(i => i.askPrice == null).length;
+  // "Saiu sozinho" só do que a lista mostra: numa lista só de doação, o item
+  // vendido está fora por estar à venda, não por ter sido vendido.
+  const noEscopo = d => sh.destinos.includes(d);
+  const vendidos = noEscopo('Vender') ? base.filter(i => i.destination === 'Vender' && i.saleStatus === 'Vendido').length : 0;
+  const doados = noEscopo('Doar') ? base.filter(i => i.destination === 'Doar' && i.donationStatus === 'Doado').length : 0;
+  // Venda numa lista só de doação, ou o contrário — vendido ou não.
+  const foraEscopo = base.filter(i => Painel.PUBLIC_DESTINATIONS.includes(i.destination) && !noEscopo(i.destination)).length;
+  // "A decidir", "Levar" e "Descartar": não entram em lista nenhuma.
+  const foraDestino = base.filter(i => !Painel.PUBLIC_DESTINATIONS.includes(i.destination)).length;
+  const excluidos = base.filter(i => excl.has(i.id) && isPublicItem(i, sh)).length;
+  const doacoes = dentro.filter(i => i.destination === 'Doar').length;
+  // "Sem preço" é aviso de venda: doação não tem preço por definição.
+  const semPreco = dentro.filter(i => i.destination === 'Vender' && i.askPrice == null).length;
   const semFoto = dentro.filter(i => !i.photos.length).length;
   const semDesc = dentro.filter(i => !i.publicNotes).length;
-  const partes = [`<b>${dentro.length}</b> ${dentro.length === 1 ? 'item aparece' : 'itens aparecem'} agora`];
+  const partes = [`<b>${dentro.length}</b> ${dentro.length === 1 ? 'item aparece' : 'itens aparecem'} agora`
+    + (doacoes && sh.destinos.length > 1 ? ` (${doacoes} em doação)` : '')];
   if(vendidos) partes.push(`${vendidos} ${vendidos === 1 ? 'vendido saiu' : 'vendidos saíram'} sozinho${vendidos === 1 ? '' : 's'}`);
-  if(foraDestino) partes.push(`${foraDestino} fora por não ser "Vender"`);
+  if(doados) partes.push(`${doados} ${doados === 1 ? 'doado saiu' : 'doados saíram'} sozinho${doados === 1 ? '' : 's'}`);
+  if(foraEscopo) partes.push(`${foraEscopo} fora por ${sh.destinos[0] === 'Vender' ? 'ser doação' : 'estar à venda'}`);
+  if(foraDestino) partes.push(`${foraDestino} fora por não ser venda nem doação`);
   if(excluidos) partes.push(`${excluidos} ${excluidos === 1 ? 'excluído' : 'excluídos'} à mão`);
   const avisos = [];
   if(semPreco) avisos.push(`${semPreco} sem preço (aparece como "a combinar")`);
@@ -4705,6 +4739,12 @@ function renderShares(){
           <input type="date" class="sh-exp" value="${escapeAttr(sh.expiresAt || '')}">
           <span class="hint-priv">Depois desta data o link para de abrir.</span>
         </div>
+        <div class="field">
+          <label>Mostra</label>
+          <select class="sh-scope">${SHARE_SCOPES.map(s =>
+            `<option value="${s.id}"${s.id === shareScopeId(sh) ? ' selected' : ''}>${escapeHtml(s.label)}</option>`).join('')}</select>
+          <span class="hint-pub">Doação aparece sem preço, como "doação"; "Prometido" aparece como reservado.</span>
+        </div>
         <div class="field wide">
           <label>Recado no topo da página</label>
           <textarea class="sh-intro" rows="2" maxlength="400" placeholder="Ex: separei essas coisas para vocês verem antes">${escapeHtml(sh.intro)}</textarea>
@@ -4749,6 +4789,17 @@ function renderShares(){
       toast(sh.active ? 'Lista ligada' : 'Lista desligada — o link para de abrir');
     });
 
+    // Trocar o escopo muda a página pública na hora (a vitrine relê em
+    // segundos), então grava já, e não no debounce dos campos de texto.
+    card.querySelector('.sh-scope').addEventListener('change', async (e)=>{
+      sh.destinos = Painel.normalizeShareDestinations(e.target.value.split(','));
+      stampShare(sh);
+      await saveShares();
+      renderShares();
+      render();
+      toast(`Lista "${sh.name}" agora mostra ${shareScopeLabel(sh)}`);
+    });
+
     card.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', async ()=>{
       const act = b.dataset.act;
       if(act === 'copy'){
@@ -4775,12 +4826,16 @@ function renderShares(){
         return;
       }
       if(act === 'filter'){
+        // O chip de destino da tela vale aqui como na criação: é ele que diz
+        // o escopo. O toast repete o resultado porque o chip pode ter sido
+        // esquecido ativo.
         sh.filter = Painel.normalizeShare({ filter: invFilters }).filter;
+        sh.destinos = shareDestinationsFromFilter(invFilters);
         stampShare(sh);
         await saveShares();
         renderShares();
         render();
-        toast('Filtro da lista atualizado');
+        toast(`Filtro da lista atualizado — mostra ${shareScopeLabel(sh)}`);
         return;
       }
       if(act === 'items'){
@@ -4797,6 +4852,9 @@ function startShareEdit(sh){
   // A base da lista passa a ser o que está na tela: é a tabela do inventário
   // inteira — com busca, ordenação, foto e preço — servindo de seletor.
   Object.assign(invFilters, normalizeInvFilter(sh.filter));
+  // Lista de um escopo só ganha o chip daquele destino: ver trinta itens à
+  // venda com o checkbox desabilitado numa lista de doação é só ruído.
+  invFilters.destination = sh.destinos.length === 1 ? sh.destinos[0] : '';
   syncFilterInputs();
   closeShareModal();
   setView('inventory');
@@ -4841,6 +4899,9 @@ document.getElementById('shareCreate').addEventListener('click', async ()=>{
     name: nome,
     slug: newShareSlug(nome),
     filter: invFilters,
+    // O chip de destino da tela decide se a lista é de venda, de doação ou
+    // das duas; o select do card muda depois.
+    destinos: shareDestinationsFromFilter(invFilters),
     whatsapp: ultima ? ultima.whatsapp : '',
   });
   stampShare(sh);
@@ -4850,7 +4911,7 @@ document.getElementById('shareCreate').addEventListener('click', async ()=>{
   render();
   const el = document.querySelector(`.sh-card[data-id="${sh.id}"] .sh-wa`);
   if(el && !sh.whatsapp) el.focus();
-  toast(`Lista "${nome}" criada com ${shareItemsOf(sh).length} itens`);
+  toast(`Lista "${nome}" criada com ${shareItemsOf(sh).length} itens (${shareScopeLabel(sh)})`);
 });
 
 // ---- Texto do anúncio ----
