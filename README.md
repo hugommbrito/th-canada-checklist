@@ -74,6 +74,22 @@ conta é a exibição e a soma, ambas filtrando por destino. Pelo mesmo motivo "
 é derivado, nunca gravado: vendido para quem vende, doado para quem doa, um checkbox
 "já saiu de casa" para quem leva/descarta.
 
+### Filtrar por destino e, dentro dele, por estágio
+
+Os chips acima da tabela filtram por destino e contam o inventário inteiro (são o mapa,
+não o recorte). Com um destino ativo aparece uma **segunda fileira**, com os estágios
+daquele ciclo: *Vender* abre *Não anunciado … Vendido*, *Doar* abre *Não oferecido …
+Doado*, e *Levar* e *Descartar* abrem *Em casa* / *Já saiu de casa* — o checkbox do
+detalhe lido como dois estados. É o que responde "o que ainda falta anunciar?" e "o que já
+foi vendido?" sem ordenar a coluna e procurar a fronteira. *A decidir* não tem ciclo, e
+não abre fileira nenhuma.
+
+O estágio pertence ao destino: trocar ou desligar o chip de cima zera o de baixo, e um
+estágio de fora do ciclo ativo é descartado na normalização (`normalizeInvFilter`), de modo
+que um filtro gravado com "Vender + Vendido" e lido com "Doar" vira só "Doar". Numa lista
+compartilhada o estágio não é gravado, pelo mesmo motivo que o destino não é (ver *Listas
+compartilhadas*).
+
 ### Doação também tem ciclo
 
 Quem vai para doação passa pelo mesmo tipo de acompanhamento que a venda, sem o dinheiro:
@@ -342,8 +358,9 @@ mensagem do WhatsApp a doação vai como "— doação" e fica fora do total e d
 
 Lista gravada antes de existir o escopo **continua sendo só de venda**: o link já circulou,
 e passar a mostrar as doações sem ninguém pedir seria uma mudança silenciosa numa página
-pública. O escopo mora fora do filtro (`filter.destination` continua zerado ao salvar): um
-filtro com "A decidir" gravado seria uma lista vazia para sempre, com o link abrindo.
+pública. O escopo mora fora do filtro (`filter.destination` e `filter.stage` continuam
+zerados ao salvar): um filtro com "A decidir" gravado seria uma lista vazia para sempre,
+com o link abrindo — e "Vender + Vendido" também.
 
 Item **vendido ou doado sai da lista sozinho** e a foto dele deixa de ser servida. Item
 **reservado ou prometido** continua visível, marcado, e não é selecionável. Item à venda sem

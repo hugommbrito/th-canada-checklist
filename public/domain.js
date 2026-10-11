@@ -336,15 +336,38 @@
   // rota que serve a vitrine tem de resolver o filtro de uma lista exatamente
   // como a tela resolve o da toolbar. Duas implementações divergiriam, e a
   // divergência apareceria como item errado na tela de um estranho.
-  const INV_FILTER_KEYS = ['q','category','room','owner','destination'];
+  //
+  // Cada destino tem o seu ciclo, e o filtro por estágio só existe dentro de
+  // um destino: "Vendido" é um estágio de Vender, "Já saiu de casa" é a
+  // situação de quem leva ou descarta. Para Levar/Descartar o estágio não é
+  // gravado — é o resolvedAt lido como dois estados, para o chip do filtro
+  // falar a mesma língua do checkbox do detalhe. "A decidir" não tem ciclo.
+  const RESOLVE_STAGES = ['Em casa','Já saiu de casa'];
+  function destStages(destination){
+    if(destination === 'Vender') return SALE_STAGES;
+    if(destination === 'Doar')   return DONATION_STAGES;
+    if(destination === 'Levar' || destination === 'Descartar') return RESOLVE_STAGES;
+    return [];
+  }
+  function itemStage(it){
+    if(it.destination === 'Vender') return it.saleStatus;
+    if(it.destination === 'Doar')   return it.donationStatus;
+    if(it.destination === 'Levar' || it.destination === 'Descartar') return it.resolvedAt ? RESOLVE_STAGES[1] : RESOLVE_STAGES[0];
+    return null;
+  }
+  const INV_FILTER_KEYS = ['q','category','room','owner','destination','stage'];
   function normalizeInvFilter(raw){
     raw = raw || {};
+    const destination = DESTINATIONS.some(d => d.id === raw.destination) ? raw.destination : '';
     return {
       q: String(raw.q || ''),
       category: String(raw.category || ''),
       room: String(raw.room || ''),
       owner: OWNERS.includes(raw.owner) ? raw.owner : '',
-      destination: DESTINATIONS.some(d => d.id === raw.destination) ? raw.destination : '',
+      destination,
+      // Estágio sem destino não quer dizer nada, e "Vendido" com o chip em
+      // Doar também não: fora do ciclo do destino ativo ele cai.
+      stage: destStages(destination).includes(raw.stage) ? raw.stage : '',
       risk: !!raw.risk,
       storyOut: !!raw.storyOut,
     };
@@ -356,6 +379,7 @@
     ctx = ctx || {};
     const q = norm(f.q);
     return (!f.destination || it.destination === f.destination)
+        && (!f.stage       || itemStage(it) === f.stage)
         && (!f.category    || it.category === f.category)
         && (!f.room        || it.room === f.room)
         && (!f.owner       || it.owner === f.owner)
@@ -502,6 +526,9 @@
     // vazia PARA SEMPRE, com o link abrindo normalmente. Zerar aqui é o que
     // impede a combinação de existir.
     f.destination = '';
+    // E o estágio vai junto: é a lente de um destino, e gravado numa lista
+    // daria o mesmo vazio permanente — "só os vendidos" nunca é público.
+    f.stage = '';
     return f;
   }
   // Lista gravada antes de existir `destinos` continua sendo só de venda, como
@@ -612,7 +639,7 @@
     fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizePhotos, normalizeItem,
     normalizeAiSuggestion,
     isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
-    itemRisk, invTotals,
+    itemRisk, invTotals, destStages, itemStage,
     normalizeInvFilter, matchesInvFilter, filterInvItems, similarTitles,
     newShareSlug, isShareSlug, normalizeShare, normalizeShareStore, shareStatus,
     normalizeShareDestinations, shareDestinationsFromFilter,
