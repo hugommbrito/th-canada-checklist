@@ -99,6 +99,23 @@ garante que a aba não seja usada, então o campo no topo da tabela cadastra com
 vêm depois, só nos itens que merecem. Duplicata é permitida: "Cadeira" seis vezes é
 resultado legítimo de varrer uma sala.
 
+### Nome parecido
+
+Duplicata continua permitida — mas a duplicata *por engano*, a geladeira cadastrada de
+novo porque ninguém lembrava que ela já estava na lista, agora dá para ver antes de
+acontecer. Enquanto o nome é digitado, tanto na captura rápida quanto no modal (item
+novo ou em edição), aparece o que já existe com nome parecido: foto, cômodo, destino e
+status, e um toque abre o item em vez de criar outro. Enter e Salvar seguem cadastrando:
+a lista avisa, não bloqueia, porque "Cadeira" seis vezes continua sendo resultado
+legítimo de varrer uma sala.
+
+"Parecido" é por palavra, com acento e maiúscula ignorados e "de/da/com" fora da conta:
+"Sofá 3 lugares" acha "Sofa de três lugares"; "cadei" acha "Cadeira" (a última palavra
+vale como prefixo, porque o nome ainda está sendo escrito); "geladera" acha "Geladeira"
+(um erro de digitação em palavras de cinco letras ou mais, dois a partir de oito);
+"micro-ondas" acha "Microondas". A regra mora em `domain.js` (`similarTitles`), ao lado
+do filtro da busca, e o item em edição fica fora da própria lista.
+
 ### Editar na própria tabela
 
 A tabela é onde a triagem acontece, então o que ela mostra dá para mudar nela mesma, sem

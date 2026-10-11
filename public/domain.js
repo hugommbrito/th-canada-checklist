@@ -364,6 +364,91 @@
     return list.filter(it => matchesInvFilter(it, nf, ctx));
   }
 
+  // ---- Itens com nome parecido ----
+  // Duplicata é permitida de propósito — "Cadeira" seis vezes é o resultado
+  // legítimo de varrer uma sala (ver captura rápida). O que isto evita é a
+  // duplicata por engano: cadastrar a geladeira de novo porque ninguém lembrava
+  // que ela já estava na lista. Por isso não bloqueia nada: só devolve o que já
+  // existe com nome parecido, para a tela mostrar antes de o Enter acontecer.
+  //
+  // Mora aqui por ser puro (texto entra, lista sai) e para o teste rodar em node.
+  //
+  // "Parecido" é por palavra, não por caractere: "Sofá 3 lugares" acha "Sofa de
+  // três lugares" porque as duas têm "sofa" e "lugares", e "de" não conta. Um
+  // erro de digitação ("geladera") ainda acha, e a última palavra vale como
+  // prefixo ("cadei" acha "Cadeira") porque a lista aparece enquanto o nome
+  // ainda está sendo escrito.
+  const TITLE_STOPWORDS = new Set(['de','da','do','das','dos','e','com','sem','para','pra','em','no','na','nos','nas','o','a','os','as','um','uma']);
+  function titleTokens(v){
+    return norm(v).replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(t => t && !TITLE_STOPWORDS.has(t));
+  }
+  // Distância de edição (Levenshtein) com teto: devolve max+1 assim que passa
+  // dele. Nome de item tem dez letras — não vale otimizar além disso.
+  function editDistance(a, b, max){
+    if(a === b) return 0;
+    if(Math.abs(a.length - b.length) > max) return max + 1;
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for(let i = 1; i <= a.length; i++){
+      const cur = [i];
+      let best = i;
+      for(let j = 1; j <= b.length; j++){
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if(cur[j] < best) best = cur[j];
+      }
+      if(best > max) return max + 1;
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  // a é a palavra digitada, b a do item já cadastrado. Palavra curta só casa
+  // exata ("mesa" ≠ "meia"); de 5 letras em diante tolera 1 erro, de 8 em
+  // diante 2 ("geladera" ~ "geladeira", "microndas" ~ "microondas").
+  function tokenLike(a, b, prefixOk){
+    if(a === b) return true;
+    if(prefixOk && a.length >= 3 && b.startsWith(a)) return true;
+    const n = Math.max(a.length, b.length);
+    if(n < 5) return false;
+    const tol = n >= 8 ? 2 : 1;
+    return editDistance(a, b, tol) <= tol;
+  }
+  // Devolve [{ item, score }] do maior para o menor, no máximo opts.limit (6).
+  // opts.excludeId tira o próprio item quando ele está sendo editado.
+  // Score: 100 mesmo nome; 80 tudo que foi digitado está no item ("cadeira"
+  // acha "Cadeira de escritório"); 70 o item é a versão genérica ("cadeira de
+  // escritório" acha "Cadeira"); 42–65 parte das palavras em comum; 60 nome
+  // junto igual a menos de duas letras ("micro-ondas" vs "microondas").
+  function similarTitles(title, items, opts){
+    opts = opts || {};
+    const q = titleTokens(title);
+    if(!q.length) return [];
+    const qs = q.join('');
+    const last = q.length - 1;
+    const like = (a, i, b) => tokenLike(a, b, i === last);
+    const out = [];
+    for(const it of items || []){
+      if(!it || it.id === opts.excludeId) continue;
+      const t = titleTokens(it.title);
+      if(!t.length) continue;
+      const ts = t.join('');
+      let score = 0;
+      if(ts === qs) score = 100;
+      else {
+        const hitQ = q.filter((a, i) => t.some(b => like(a, i, b))).length;
+        const hitT = t.filter(b => q.some((a, i) => like(a, i, b))).length;
+        if(hitQ === q.length) score = 80;
+        else if(hitT === t.length) score = 70;
+        else if(hitQ){
+          const dice = (hitQ + hitT) / (q.length + t.length);
+          if(dice >= 0.25) score = Math.round(30 + 50 * dice);
+        }
+        if(!score && Math.max(qs.length, ts.length) >= 6 && editDistance(qs, ts, 2) <= 2) score = 60;
+      }
+      if(score) out.push({ item: it, score });
+    }
+    out.sort((x, y) => y.score - x.score || String(x.item.title).localeCompare(String(y.item.title), 'pt-BR'));
+    return out.slice(0, opts.limit || 6);
+  }
+
   // ---- Listas de venda ----
   function onlyDigits(v, min, max){
     const d = String(v == null ? '' : v).replace(/\D/g, '');
@@ -483,7 +568,7 @@
     normalizeAiSuggestion,
     isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
     itemRisk, invTotals,
-    normalizeInvFilter, matchesInvFilter, filterInvItems,
+    normalizeInvFilter, matchesInvFilter, filterInvItems, similarTitles,
     newShareSlug, isShareSlug, normalizeShare, normalizeShareStore, shareStatus,
     isPublicItem, shareItems, waLink,
   };

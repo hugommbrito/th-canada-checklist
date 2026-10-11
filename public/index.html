@@ -1062,6 +1062,33 @@
   .ia-comps li{margin:2px 0;overflow-wrap:anywhere;}
   .ia-comps a{color:inherit;}
 
+  /* ---- itens com nome parecido ---- */
+  /* No modal, a mesma caixa tracejada do painel da IA: é mais um "olha isto
+     antes de salvar". */
+  .dup-panel{border:1px dashed #d8cfb6;border-radius:8px;padding:8px 10px;margin-top:6px;background:#fbf8f0;font-size:12px;line-height:1.35;}
+  .dup-panel[hidden]{display:none;}
+  .dup-title{font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a5c14;margin-bottom:4px;}
+  .dup-row{display:flex;align-items:center;gap:8px;padding:3px 0;}
+  .dup-row .inv-thumb{width:28px;height:28px;flex-shrink:0;font-size:12px;cursor:default;}
+  .dup-row .dup-txt{flex:1;min-width:0;}
+  .dup-row .dup-name{display:block;font-weight:600;overflow-wrap:anywhere;}
+  .dup-row .dup-sub{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);}
+  .dup-row button{flex-shrink:0;border:1px solid #d8cfb6;background:#fff;border-radius:7px;padding:2px 10px;cursor:pointer;font-size:11px;color:inherit;}
+  .dup-row button:hover{border-color:var(--amber-dim);color:var(--amber-dim);}
+  .dup-more{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);margin-top:2px;}
+  /* Na captura rápida a lista flutua sob a barra, no escuro dela, para aparecer
+     enquanto o nome é digitado sem empurrar a tabela para baixo. */
+  .inv-quick{position:relative;}
+  .dup-pop{position:absolute;left:0;right:0;top:100%;z-index:20;margin-top:4px;
+    background:var(--navy-800);border:1px solid var(--navy-700);border-radius:9px;padding:6px 10px;
+    box-shadow:0 10px 24px rgba(0,0,0,.35);color:var(--paper);font-size:12px;line-height:1.35;}
+  .dup-pop[hidden]{display:none;}
+  .dup-pop .dup-title{color:var(--amber);}
+  .dup-pop .dup-row{cursor:pointer;border-radius:6px;padding:4px 6px;margin:0 -6px;}
+  .dup-pop .dup-row:hover{background:var(--navy-700);}
+  .dup-pop .dup-sub,.dup-pop .dup-more{color:#9aa5bd;}
+  .dup-pop .inv-thumb{background:var(--navy-700);}
+
   /* ---- recebimentos e story ---- */
   .receipts{border:1px solid #d8cfb6;border-radius:8px;padding:8px;background:#fff;}
   .rc-empty{
@@ -1422,6 +1449,7 @@
     <div class="inv-quick">
       <input type="text" id="invQuickName" placeholder="+ Nome do item — Enter cadastra e continua…" autocomplete="off">
       <select id="invQuickRoom" title="Cômodo — fica fixo entre um cadastro e outro"></select>
+      <div class="dup-pop" id="invQuickSimilar" hidden></div>
     </div>
 
     <div class="cat-summary inv-chips" id="invChips"></div>
@@ -1605,6 +1633,7 @@
     <div class="field">
       <label>Nome</label>
       <input type="text" id="iTitle" placeholder="Ex: Sofá de 3 lugares">
+      <div class="dup-panel" id="iSimilar" hidden></div>
     </div>
 
     <div class="field">
@@ -1851,7 +1880,7 @@ const {
   newInvId, newReceiptId, isISODate, isISODateTime, parseMoney, toCents,
   fmtMoneyPlain, fmtMoney, fmtMoneyShort, moneyToInput, normalizeItem, normalizeAiSuggestion,
   isResolved, receivedOf, pendingOf, isStoryChannel, storyAge, storyExpired,
-  normalizeInvFilter, filterInvItems,
+  normalizeInvFilter, filterInvItems, similarTitles,
   newShareSlug, normalizeShare, normalizeShareStore, shareStatus, isPublicItem,
 } = Painel;
 
@@ -3674,11 +3703,104 @@ document.getElementById('invQuickName').addEventListener('keydown', async (e)=>{
   stampEdit(it);
   invItems.push(it);
   input.value = '';
+  hideQuickSimilar();
   populateInvSelects();
   render();
   input.focus();
   saveInventorySoon();
 });
+
+// ---- Itens com nome parecido ----
+// A regra está em domain.js (similarTitles); aqui é só o desenho. Aparece nos
+// dois lugares onde um nome é digitado — captura rápida e modal — e não
+// bloqueia nem o Enter nem o Salvar: duplicata de propósito continua sendo um
+// Enter; a por engano agora dá para ver antes.
+const DUP_SHOW = 5;
+function similarRowsHtml(matches, comBotao){
+  const rows = matches.slice(0, DUP_SHOW).map(({ item: it }) => {
+    const s = stageOf(it);
+    const sub = [it.room, it.destination, s ? s.value : ''].filter(Boolean).join(' · ');
+    // Caminho já validado por normalizePhotos (só /uploads/…), como na tabela.
+    const thumb = it.photos.length
+      ? `<img class="inv-thumb" src="${escapeAttr(it.photos[0])}" alt="" loading="lazy" width="28" height="28"
+           onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'inv-thumb no-photo',textContent:'🖼'}))">`
+      : `<span class="inv-thumb no-photo">🖼</span>`;
+    return `<div class="dup-row" data-id="${escapeAttr(it.id)}">${thumb}
+      <span class="dup-txt"><span class="dup-name">${escapeHtml(it.title)}</span><span class="dup-sub">${escapeHtml(sub)}</span></span>
+      ${comBotao ? `<button type="button" data-action="dup-open" data-id="${escapeAttr(it.id)}">Abrir</button>` : ''}</div>`;
+  });
+  const resto = matches.length - DUP_SHOW;
+  return rows.join('') + (resto > 0 ? `<div class="dup-more">e mais ${resto} com nome parecido</div>` : '');
+}
+function dupTitle(matches){
+  return matches[0].score === 100 ? '⚠ Já existe um item com este nome' : 'Já existe com nome parecido';
+}
+
+let modalSimilarTimer = null;
+function renderSimilarInModal(){
+  clearTimeout(modalSimilarTimer);
+  const el = document.getElementById('iSimilar');
+  const all = similarTitles(document.getElementById('iTitle').value, invItems, { excludeId: editingInvId, limit: 100 });
+  if(!all.length){ el.innerHTML = ''; el.hidden = true; return; }
+  el.innerHTML = `<div class="dup-title">${dupTitle(all)} — é o mesmo?</div>` + similarRowsHtml(all, true);
+  el.hidden = false;
+}
+document.getElementById('iTitle').addEventListener('input', ()=>{
+  clearTimeout(modalSimilarTimer);
+  modalSimilarTimer = setTimeout(renderSimilarInModal, 120);
+});
+// Trocar de item descarta o formulário. Num item novo só com o nome digitado
+// não há o que perder; editando, ou com foto já enviada, há — daí o confirm.
+document.getElementById('iSimilar').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-action="dup-open"]');
+  if(!btn) return;
+  const alvo = invItems.find(x => x.id === btn.dataset.id);
+  if(!alvo) return;
+  if((editingInvId || editingPhotos.length)
+     && !confirm(`Abrir "${alvo.title}" descarta o que você mudou aqui. Continuar?`)) return;
+  closeInvModal(false);
+  openInvModal(alvo);
+});
+
+let quickSimilarTimer = null;
+function renderQuickSimilar(){
+  const el = document.getElementById('invQuickSimilar');
+  const all = similarTitles(document.getElementById('invQuickName').value, invItems, { limit: 100 });
+  if(!all.length){ hideQuickSimilar(); return; }
+  el.innerHTML = `<div class="dup-title">${dupTitle(all)} — toque para abrir, ou Enter cadastra mesmo assim</div>`
+    + similarRowsHtml(all, false);
+  el.hidden = false;
+}
+function hideQuickSimilar(){
+  clearTimeout(quickSimilarTimer);
+  const el = document.getElementById('invQuickSimilar');
+  el.hidden = true;
+  el.innerHTML = '';
+}
+{
+  const campo = document.getElementById('invQuickName');
+  const pop = document.getElementById('invQuickSimilar');
+  campo.addEventListener('input', ()=>{
+    clearTimeout(quickSimilarTimer);
+    quickSimilarTimer = setTimeout(renderQuickSimilar, 120);
+  });
+  campo.addEventListener('focus', ()=>{ if(campo.value.trim()) renderQuickSimilar(); });
+  // Esc fecha a lista sem apagar o que foi digitado. Enter continua sendo o
+  // cadastro (tratado acima), e a lista some junto com o campo limpo.
+  campo.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') hideQuickSimilar(); });
+  // O mousedown abaixo segura o foco no campo para o clique na linha chegar
+  // antes de a lista sumir; o atraso cobre quem saiu por Tab.
+  campo.addEventListener('blur', ()=> setTimeout(hideQuickSimilar, 200));
+  pop.addEventListener('mousedown', (e)=> e.preventDefault());
+  pop.addEventListener('click', (e)=>{
+    const row = e.target.closest('.dup-row');
+    if(!row) return;
+    const it = invItems.find(x => x.id === row.dataset.id);
+    if(!it) return;
+    hideQuickSimilar();
+    openInvModal(it);
+  });
+}
 
 // ---- Filtros, busca e ordenação ----
 let invSearchTimer = null;
@@ -4056,6 +4178,7 @@ function openInvModal(it, opts){
   renderReceiptEditor();
   syncCondFields();
   syncStoryField();
+  renderSimilarInModal();
   document.getElementById('invModalBackdrop').classList.add('open');
   if(opts.stage === 'Vendido') setTimeout(()=> document.getElementById('iSold').focus(), 60);
 }
@@ -4222,7 +4345,7 @@ document.getElementById('iaPanel').addEventListener('click', (e)=>{
   if(acao === 'refazer'){ pedirSugestaoIa(); return; }
   if(acao === 'titulo'){
     const el = document.getElementById('iTitle');
-    el.value = editingAi.titulo; el.focus(); syncIaButton();
+    el.value = editingAi.titulo; el.focus(); syncIaButton(); renderSimilarInModal();
     toast('Nome aplicado — revise antes de salvar');
   } else if(acao === 'categoria'){
     document.getElementById('iCategory').value = editingAi.categoriaSugerida;
