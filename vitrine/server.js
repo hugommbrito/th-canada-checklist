@@ -267,7 +267,9 @@ async function pegaLista(slug) {
 // Visita é uma pessoa abrindo a página, não um fetch de dados (o cache faz uma
 // coisa não ser a outra). E o preview de link do WhatsApp abre a página sozinho
 // quando alguém cola o link — quem cola é o próprio casal, então não conta.
-const ROBO_RE = /bot|crawl|spider|preview|whatsapp|facebookexternalhit|telegram|slurp|curl|wget|python|node-fetch|headlesschrome|monitor/i;
+// O assistente de IA que busca a página porque alguém colou o link no chat
+// (Claude-User, ChatGPT-User) também não é uma pessoa abrindo a lista.
+const ROBO_RE = /bot|crawl|spider|preview|whatsapp|facebookexternalhit|telegram|slurp|curl|wget|python|node-fetch|headlesschrome|monitor|claude-user|chatgpt-user/i;
 const SAL = crypto.randomBytes(16);
 const vistos = new Map();    // hash -> quando
 const DEDUP_MS = 30 * 60 * 1000;
@@ -392,8 +394,36 @@ app.get('/favicon.svg', (req, res) => {
   res.type('image/svg+xml').set('Cache-Control', 'public, max-age=604800').send(FAVICON);
 });
 
+// ---- robots.txt ----
+// robots.txt é um pedido, não uma tranca: só vale para o robô que o lê, e o que
+// protege a lista continua sendo o slug. O que ele decide é QUEM pode buscar a
+// página por conta própria.
+//
+// Rastreador de busca e de treino (Googlebot, GPTBot, ClaudeBot...) continua
+// fora: a lista tem os nossos pertences e preços, e vence. Os agentes que
+// buscam uma página porque alguém colou o link no chat (Claude-User,
+// ChatGPT-User) entram, e só nos caminhos da lista e das fotos — é o que deixa
+// pedir a uma IA "lê esta lista e pesquisa quanto vale cada coisa".
+//
+// Dois detalhes da lógica do arquivo explicam o formato: cada robô usa SÓ o
+// grupo que cita o nome dele (ou o `*`, se nenhum citar), as regras não se
+// somam — por isso o Disallow: / se repete no segundo grupo; e dentro do grupo
+// vence o caminho mais longo, então /l/ e /f/ ganham do /. O noindex nos
+// cabeçalhos fica: ele impede indexar, não buscar.
+const ROBOTS_TXT = [
+  'User-agent: *',
+  'Disallow: /',
+  '',
+  'User-agent: Claude-User',
+  'User-agent: ChatGPT-User',
+  'Allow: /l/',
+  'Allow: /f/',
+  'Disallow: /',
+  '',
+].join('\n');
+
 app.get('/robots.txt', (req, res) => {
-  res.type('text/plain').send('User-agent: *\nDisallow: /\n');
+  res.type('text/plain').send(ROBOTS_TXT);
 });
 
 // Sonda opcional do painel. O /healthz sozinho só sabe da última conversa que

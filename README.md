@@ -412,6 +412,27 @@ Contadas por página aberta, não por busca de dados: a vitrine tem cache, entã
 truncado com sal sorteado a cada processo — serve para não contar em dobro, não para
 identificar ninguém), e user-agent de robô não conta. **O preview de link do WhatsApp abre a
 página sozinho** quando alguém cola o link; ele está na lista de robôs justamente por isso.
+O assistente de IA que busca a página porque alguém colou o link no chat (`Claude-User`,
+`ChatGPT-User`) também não conta: não é uma pessoa abrindo a lista.
+
+### Robôs e assistentes de IA
+
+O `robots.txt` da vitrine é um pedido, não uma tranca: só o robô que o lê obedece, e o que
+protege a lista continua sendo o slug. O que ele decide é **quem pode buscar a página por
+conta própria**. Rastreador de busca e de treino (Googlebot, GPTBot, ClaudeBot...) fica fora,
+e toda resposta leva `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` — a lista tem os
+nossos pertences e preços, e vence. Os agentes que buscam uma página porque alguém colou o
+link no chat (`Claude-User`, `ChatGPT-User`) entram, e só em `/l/` e `/f/`: é o que deixa
+pedir a uma IA "lê esta lista e pesquisa quanto vale cada coisa". Para liberar outro
+assistente é uma linha `User-agent:` a mais no mesmo grupo, em `vitrine/server.js`.
+
+Dois detalhes da lógica do arquivo explicam o formato: cada robô usa **só** o grupo que cita
+o nome dele (ou o `*`), as regras não se somam — por isso o `Disallow: /` se repete no grupo
+dos assistentes; e dentro do grupo vence o caminho mais longo, então `Allow: /l/` ganha do
+`Disallow: /`. O `noindex` nos cabeçalhos não atrapalha: ele impede indexar, não buscar. A
+OpenAI documenta que o `ChatGPT-User` pode nem consultar o `robots.txt`, por ser ação do
+usuário; a liberação explícita vale de qualquer jeito, como registro da intenção. Robô guarda
+o arquivo por cerca de um dia, então uma mudança nele não vale na hora.
 
 ### Rodando as duas localmente
 
