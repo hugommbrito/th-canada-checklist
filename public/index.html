@@ -799,13 +799,13 @@
      tfoot não tem contra o que grudar. */
   .inv-wrap{max-height:calc(100vh - 320px);min-height:240px;overflow:auto;-webkit-overflow-scrolling:touch;}
   .inv-table{
-    width:100%;min-width:920px;
+    width:100%;min-width:980px;
     border-collapse:separate;border-spacing:0;  /* collapse mata a borda de célula sticky */
     table-layout:fixed;                         /* sem isso as colunas dançam ao filtrar */
     font-size:13px;
   }
   .w-sel{width:30px;} .w-exp{width:30px;} .w-photo{width:54px;} .w-name{width:auto;}
-  .w-dest{width:100px;} .w-status{width:108px;} .w-owner{width:48px;}
+  .w-cond{width:62px;} .w-dest{width:100px;} .w-status{width:108px;} .w-owner{width:48px;}
   .w-prazo{width:80px;} .w-ask{width:112px;} .w-sold{width:124px;} .w-act{width:96px;}
 
   .inv-table thead th{
@@ -922,6 +922,11 @@
   .st-3{background:rgba(106,90,205,0.16);color:#4b3fa0;}
   .st-4{background:rgba(62,142,126,0.22);color:#276a5a;}
   .who{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:var(--ink-soft);}
+  /* Estado de conservação (Novo/Ótimo/Bom/Usado). Mono e apagado como o
+     responsável: é um atributo do item, não um passo da triagem — não compete
+     com os badges de destino e status na mesma linha. */
+  .cond{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);white-space:nowrap;}
+  .sm-only .cond{padding:2px 6px;border-radius:5px;border:1px dashed rgba(27,36,54,0.3);}
   .risk-badge{
     display:inline-block;padding:2px 6px;border-radius:5px;
     font-family:'IBM Plex Mono',monospace;font-size:10px;white-space:nowrap;
@@ -1303,7 +1308,7 @@
   .sm-only{display:none;}
 
   @media (max-width:820px){
-    /* Nada de scroll horizontal: 6 das 10 colunas somem e o que elas diziam
+    /* Nada de scroll horizontal: 7 das 11 colunas somem e o que elas diziam
        reaparece como badges dentro da célula do nome. overflow-x no wrapper
        quebraria o sticky do thead, que passaria a grudar no topo do container. */
     /* Só esconder os <td> não basta: com table-layout:fixed os <col> continuam
@@ -1315,13 +1320,13 @@
     /* width:0 num <col> é ignorado pelo Chrome — a coluna segue reservando
        espaço mesmo com todas as células em display:none. display:none no
        próprio <col> é o que realmente a remove. */
-    .w-dest,.w-status,.w-owner,.w-prazo,.w-sold,.w-act{display:none;}
+    .w-cond,.w-dest,.w-status,.w-owner,.w-prazo,.w-sold,.w-act{display:none;}
     .w-name{width:auto;}
     .w-sel{width:26px;} .w-exp{width:26px;} .w-photo{width:46px;} .w-ask{width:92px;}
     .inv-wrap{max-height:none;overflow:visible;}
     .inv-table thead th{font-size:9px;padding:7px 6px;}
-    .c-dest,.c-status,.c-owner,.c-prazo,.c-sold,.c-act,
-    .h-dest,.h-status,.h-owner,.h-prazo,.h-sold,.h-act{display:none;}
+    .c-cond,.c-dest,.c-status,.c-owner,.c-prazo,.c-sold,.c-act,
+    .h-cond,.h-dest,.h-status,.h-owner,.h-prazo,.h-sold,.h-act{display:none;}
     /* No celular o checkbox é o único jeito de selecionar, então fica sempre
        aceso — não há hover para revelá-lo. */
     .c-sel input,.h-sel input{opacity:1;width:16px;height:16px;}
@@ -1488,6 +1493,7 @@
       <select id="bulkDest" title="Destino"></select>
       <select id="bulkStage" title="Status"></select>
       <select id="bulkOwner" title="Responsável"></select>
+      <select id="bulkCond" title="Estado"></select>
       <select id="bulkRoom" title="Cômodo"></select>
       <select id="bulkCat" title="Categoria"></select>
       <span class="bulk-date">
@@ -1502,7 +1508,7 @@
       <div class="inv-wrap">
         <table class="inv-table" id="invTable">
           <colgroup>
-            <col class="w-sel"><col class="w-exp"><col class="w-photo"><col class="w-name"><col class="w-dest">
+            <col class="w-sel"><col class="w-exp"><col class="w-photo"><col class="w-name"><col class="w-cond"><col class="w-dest">
             <col class="w-status"><col class="w-owner"><col class="w-prazo"><col class="w-ask">
             <col class="w-sold"><col class="w-act">
           </colgroup>
@@ -1512,6 +1518,7 @@
               <th></th>
               <th>Foto</th>
               <th class="sortable" data-sort="title">Item<span class="arrow">⇅</span></th>
+              <th class="sortable h-cond" data-sort="condition">Estado<span class="arrow">⇅</span></th>
               <th class="sortable h-dest" data-sort="destination">Destino<span class="arrow">⇅</span></th>
               <th class="sortable h-status" data-sort="saleStatus">Status<span class="arrow">⇅</span></th>
               <th class="sortable h-owner" data-sort="owner">Resp<span class="arrow">⇅</span></th>
@@ -3100,6 +3107,9 @@ const SORT_KEYS = {
   destination:it => DESTINATIONS.findIndex(d => d.id === it.destination),
   saleStatus: stageRank,
   owner:      it => it.owner || '',
+  // Pela ordem de conservação (Novo … Usado), não alfabética: "Bom" antes de
+  // "Novo" não diz nada a quem quer ver o que está mais inteiro primeiro.
+  condition:  it => CONDITIONS.indexOf(it.condition),
   deadline:   it => it.deadline || null,
   askPrice:   it => it.destination === 'Vender' ? it.askPrice : null,
   soldPrice:  it => it.soldPrice,
@@ -3185,6 +3195,11 @@ function riskBadge(it){
 function ownerShort(o){
   return o === 'Ambos' ? 'H+T' : (o || '').slice(0,1);
 }
+// Estado de conservação como badge clicável, igual ao responsável. Recebe o
+// `inl` da linha porque ele já carrega o id do item.
+function condBadge(it, inl){
+  return inl('condition', 'Estado: ' + it.condition + ' · clique para trocar', escapeHtml(it.condition), 'cond');
+}
 // A tabela mostra só a capa (a primeira foto); o contador diz que há mais, e o
 // clique abre a galeria. O src é caminho do nosso /uploads porque normalizePhotos
 // já rejeitou qualquer outra coisa — é o que fecha javascript:/data: aqui.
@@ -3222,8 +3237,9 @@ function invRowHtml(it){
     <td class="c-name">
       <span class="inv-name">${escapeHtml(it.title)}</span>
       <span class="inv-sub">${it.category ? `<i class="cat-dot" style="background:${colorForCategory(it.category)}"></i>${escapeHtml(it.category)}` : ''}${it.room ? ` · ${escapeHtml(it.room)}` : ''}${marcas.length ? ` · 🔗 ${escapeHtml(marcas[0])}${marcas.length > 1 ? ' +' + (marcas.length - 1) : ''}` : ''}</span>
-      <span class="sm-only">${destBadge(it)}${stageBadge(it)}${sells ? storyBadge(it) : ''}${riskBadge(it)}</span>
+      <span class="sm-only">${destBadge(it)}${stageBadge(it)}${sells ? storyBadge(it) : ''}${riskBadge(it)}${condBadge(it, inl)}</span>
     </td>
+    <td class="c-cond">${condBadge(it, inl)}</td>
     <td class="c-dest">${destBadge(it)}</td>
     <td class="c-status">${stageBadge(it) + (sells ? storyBadge(it) : '') || NA}</td>
     <td class="c-owner">${inl('owner', it.owner + ' · clique para trocar', escapeHtml(ownerShort(it.owner)), 'who')}</td>
@@ -3277,7 +3293,7 @@ function invDetailHtml(it){
   const doa = it.destination === 'Doar';
   return `
   <tr class="inv-detail" data-id="${escapeAttr(it.id)}">
-    <td colspan="11">
+    <td colspan="12">
       <div class="dt-grid">
         ${dtCell('Estado', it.condition)}
         ${dtCell('Anunciado em', it.channel, it.listingUrl || null)}
@@ -3363,7 +3379,7 @@ function renderInventory(){
   document.getElementById('invTable').classList.toggle('sel-off', !!shareEditingList());
   document.getElementById('invBody').innerHTML = list.length
     ? list.map(invRowHtml).join('')
-    : '<tr class="inv-empty"><td colspan="11">Nenhum item com esses filtros.</td></tr>';
+    : '<tr class="inv-empty"><td colspan="12">Nenhum item com esses filtros.</td></tr>';
 
   document.querySelectorAll('#invHead th[data-sort]').forEach(th=>{
     const on = th.dataset.sort === invSort.key;
@@ -3571,6 +3587,7 @@ function renderBulkBar(){
   const st = bulkStageOptions(sel);
   fillBulkSelect('bulkStage', st.placeholder, st.values, st);
   fillBulkSelect('bulkOwner', 'Responsável…', OWNERS);
+  fillBulkSelect('bulkCond', 'Estado…', CONDITIONS);
   fillBulkSelect('bulkRoom', 'Cômodo…', knownRooms());
   fillBulkSelect('bulkCat', 'Categoria…', invCategories);
 }
@@ -3605,6 +3622,11 @@ document.getElementById('bulkOwner').addEventListener('change', (e)=>{
   const v = e.target.value;
   if(!v) return;
   bulkApply(it => { it.owner = v; }, 'Responsável → ' + v);
+});
+document.getElementById('bulkCond').addEventListener('change', (e)=>{
+  const v = e.target.value;
+  if(!v) return;
+  bulkApply(it => { it.condition = v; }, 'Estado → ' + v);
 });
 document.getElementById('bulkRoom').addEventListener('change', (e)=>{
   const v = e.target.value;
@@ -3652,6 +3674,7 @@ document.getElementById('bulkClear').addEventListener('click', clearSelection);
 const INLINE_FIELDS = {
   destination:{ kind:'select', options: ()=> DESTINATIONS.map(d => d.id) },
   owner:      { kind:'select', options: ()=> OWNERS },
+  condition:  { kind:'select', options: ()=> CONDITIONS },
   deadline:   { kind:'date' },
   askPrice:   { kind:'money' },
 };
@@ -3712,6 +3735,7 @@ async function commitInline(it, field, raw){
   let v;
   if(field === 'destination')   v = DESTINATIONS.some(d => d.id === raw) ? raw : it.destination;
   else if(field === 'owner')    v = OWNERS.includes(raw) ? raw : it.owner;
+  else if(field === 'condition') v = CONDITIONS.includes(raw) ? raw : it.condition;
   else if(field === 'deadline') v = isISODate(raw) ? raw : null;
   else if(field === 'askPrice'){
     v = parseMoney(raw);

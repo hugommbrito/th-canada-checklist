@@ -136,8 +136,9 @@ do filtro da busca, e o item em edição fica fora da própria lista.
 ### Editar na própria tabela
 
 A tabela é onde a triagem acontece, então o que ela mostra dá para mudar nela mesma, sem
-abrir o ✎: o badge de **destino** vira um dropdown no clique, o **responsável** também, o
-**prazo** vira um campo de data e o **preço pedido** um campo de valor, com a mesma
+abrir o ✎: o badge de **destino** vira um dropdown no clique, o **responsável** e o
+**estado** (Novo/Ótimo/Bom/Usado) também, o **prazo** vira um campo de data e o **preço
+pedido** um campo de valor, com a mesma
 normalização do modal (`1200` vira `1.200,00`; texto que não é preço cancela com aviso,
 em vez de apagar o preço que estava lá). O **status** já era assim: clique avança,
 Alt+clique volta. `Esc` cancela, e sair do campo sem mudar nada não carimba edição nenhuma.
@@ -151,12 +152,18 @@ O que precisa de mais de um dado continua no modal: "Vendido" (preço realizado,
 data), piso, fotos, descrições. E trocar o destino aqui segue a regra de sempre — não
 apaga nada do que o item tinha no destino anterior.
 
+O estado tem coluna própria, entre o nome e o destino, e ordena pela ordem de conservação
+(*Novo → Ótimo → Bom → Usado*), não alfabética — "Bom" antes de "Novo" não diz nada a quem
+quer ver primeiro o que está mais inteiro. No celular a coluna some e o estado reaparece
+como badge dentro da célula do nome, junto com destino, status e prazo.
+
 ### Edição em lote
 
 A primeira coluna é um checkbox. Com um item marcado aparece a barra de lote — destino,
-status, responsável, cômodo, categoria, prazo e excluir — aplicada a todos os marcados numa
-gravação só, com um toast dizendo quantos. Shift+clique marca o intervalo na ordem da tela;
-o checkbox do cabeçalho marca tudo que está no filtro; `Esc` ou "Limpar seleção" desmarca.
+status, responsável, estado, cômodo, categoria, prazo e excluir — aplicada a todos os
+marcados numa gravação só, com um toast dizendo quantos. Shift+clique marca o intervalo na
+ordem da tela; o checkbox do cabeçalho marca tudo que está no filtro; `Esc` ou "Limpar
+seleção" desmarca.
 
 A seleção é **só do que está na tela**: o que o filtro esconde sai dela. Uma ação em lote
 nunca alcança um item que não dá para ver — é a diferença entre "mudei estes 6" e "mudei 6
